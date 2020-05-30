@@ -10,5 +10,5 @@ println("Added procs $(procs())")
 println("running test_optim")
 @mpi_do manager begin 
     include("test_optim.jl");
-    find_optim(10);
+    find_optim(6);
 end
