@@ -1,5 +1,5 @@
 module par_error
-    use mpi
+    use mpi_f08
     use iso_c_binding, only: c_int32_t, c_double
     public:: compute_error
 contains
@@ -17,13 +17,12 @@ contains
         real(c_double), intent(out) :: df(n)
 
         real(c_double) ::  f_loc
-        integer(c_int32_t) :: code
-        
+        integer :: ierr
+         
         f = 0.d0
         ! computing objective
         f_loc = 0.5d0 * sum( (x - c)**2 )
-        call MPI_ALLREDUCE( f_loc, f, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD, code )
-        
+        call MPI_ALLREDUCE( f_loc, f, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD, ierr )
         ! computing gradient and ...
         df = x - c
     end subroutine compute_error

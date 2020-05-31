@@ -2,15 +2,13 @@ using Distributed
 using Optim
 using LinearAlgebra
 
-function simu(n::Integer, x::Array{Float64,1})
+function simu!(n::Integer, x::Array{Float64,1}, df::Array{Float64,1})
     f = Ref{Float64}(0.)
-    df = 0 
     c = cos.(1:n)[slice[1]:slice[2]]
-    df = zeros(slice[2]-slice[1]+1)
-    @assert  size(c,1) == size(x, 1)
+    #@assert  size(c,1) == size(x, 1)
     ccall((:compute_error, "./libpar_error.so"), 
           Cvoid, (Ref{Int32}, Ptr{Float64}, Ptr{Float64}, Ref{Float64}, Ptr{Float64}), size(x, 1), x, c, f, df)
-    return f[], df
+    return f[]
 end
 
 function partition(n::Integer, p::Integer)
@@ -30,22 +28,30 @@ function find_optim(n)
        x = zeros(n)
        part = [0;cumsum(partition(n, p))] .+1
        slice = (part[r+1], part[r+2] -1)
-       x[:] = 1:n
+       x[:] = zeros(n)
        x_loc = x[slice[1]:slice[2]];
-       f,df = simu(n, x_loc)
-       if (r == 0) 
-           println("cost function at x0 = " , f)
-       end
-       cost = x-> simu(n,x)[1]
-       grad = x-> simu(n,x)[2]
-          
-       res = optimize(cost, grad, x_loc, LBFGS(); inplace =false)
+       df = zeros(slice[2]-slice[1]+1)
+       df_dummy = copy(df)
+      
+       # curryfy simu
+       cost = x -> simu!(n,x,df_dummy)
+       grad! = (g,x)-> simu!(n,x,g)
+       
+       # One evaluation of cost and gradient       
+       f = cost(x_loc)
+       grad!(df, x_loc)
+       # beware Cint here is mandatory
+       df_glob = MPI.Gatherv(df,Cint[i for i in partition(n,p)], 0, comm)
+       if (r ==0)
+           println("f(x₀) = $f, \n |∇f(x₀)| = ", norm(df_glob))
+       end 
+
+       res = optimize(cost, grad!, x_loc, ConjugateGradient(), Optim.Options(g_tol = 1e-12,
+                                    iterations = 1000, store_trace = false, show_trace = false ))
        x_min = Optim.minimizer(res)
-       #x_glob = MPI.Gatherv(x_min, partition(n,p), 0, comm)
-       #if (rank == 0)
-       #    println(" |sol - cos(1:$n)| = ", norm(x_glob-cos.(1:n)))
-       #end
-
+       x_glob = MPI.Gatherv(x_min,Cint[i for i in partition(n,p)] , 0, comm)
+       if (r == 0)
+           println(" |sol - cos(1:$n)| = ", norm(x_glob-cos.(1:n)))
+       end
+       return res, x_glob
 end
-
-
