@@ -39,18 +39,18 @@ end
     @test ins⁻¹(ins(X)) == [0 0 0; 0 X[2,2] 0; 0 0 0 ]
 end
 
-function apply_Δ(x::Array{Float64,1}, g::Array{Float64,1})
-    n = convert(Int64, √size(x,1))
-    @assert size(g,1) == 4n + 4
-    X = zeros(n+2, n+2)
-    X[2:end-1,2:end-1] = reshape(x, n, n)
-    X[1,:] = g[1:n+2]
-    X[2:end-1,1] = g[n+3:2:3n+2]
-    X[2:end-1,end] = g[n+4:2:3n+2]
-    X[end,:] = g[3n+3:4n+4]
-    Y = heat_kernel(X) .* (n+1).^2
-    return copy(ins(Y))
+
+function set_boundary!(X::Array{Float64,2},g::Array{Float64,1})
+    m = size(g,1)
+    n = size(X,1)-2
+    @assert size(X,1) == (m-4)/4 + 2
+    @assert size(X,1) == size(X,2)
+    X[1,:]         = g[1:n+2]
+    X[2:end-1,1]   = g[n+3:2:3n+2] 
+    X[2:end-1,end] = g[n+4:2:3n+2] 
+    X[end,:]       = g[3n+3:4n+4]
 end
+
 
 function get_boundary(X::Array{Float64,2})
     @assert size(X,1) > 2
@@ -64,9 +64,22 @@ function get_boundary(X::Array{Float64,2})
     return g
 end
 
-@testset "extract" begin
+@testset "boundary" begin
     a = [ 1 2 3; 4 0 5.; 6 7 8]
     @test get_boundary(a) == [1:8;]
+    b = zeros(3,3)
+    set_boundary!(b, [1:8.;])
+    @test b ≈ a
+end
+
+function apply_Δ(x::Array{Float64,1}, g::Array{Float64,1})
+    n = convert(Int64, √size(x,1))
+    @assert size(g,1) == 4n + 4
+    X = zeros(n+2, n+2)
+    X[2:end-1,2:end-1] = reshape(x, n, n)
+    set_boundary!(X, g)
+    Y = heat_kernel(X) .* (n+1).^2
+    return copy(ins(Y))
 end
 
 @testset "apply Δ" begin
@@ -80,9 +93,30 @@ end
     @test norm(apply_Δ(ins(u),g) - ins(Δu) ) <= 1. /(n+1).^2
 end
 
+function compute(g::Array{Float64,1}, T::Float64)
+    m = size(g,1)
+    n = convert(Int64,(m-4) / 4)
+    h = 1. /(n+1)
+    dt = h.^2 /4
+    u = zeros(n+2,n+2)
+    set_boundary!(u, g)
+    #println("dt = $dt, nb_it = ", floor(Int64,T/dt))
+    for t=dt:dt:T
+        Δu = heat_kernel(u) .* (n+1).^2
+        u[2:end-1,2:end-1] -= dt .* Δu[2:end-1,2:end-1]
+    end
+    return u
+end
 
-
-#using LinearOperators
-
-#Δ₁₆ = LinearOperators(16,16, false, false, x-
-
+using Optim
+n = 5
+u_cible = rand(n,n)
+T = 10.
+function simu(g::Array{Float64,1})
+    u_calc = compute(g,T)
+    return sum((u_cible[2:end-1,2:end-1] - u_calc[2:end-1,2:end-1]).^2)
+end
+g_0 = rand(4n-4)
+res = optimize(simu, g_0)
+sol = Optim.minimizer(res)
+println("|u-u_cible|²=", simu(sol))
