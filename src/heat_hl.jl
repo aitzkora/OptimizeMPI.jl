@@ -34,9 +34,10 @@ end
 
 @testset "ins"  begin
     x = rand(9)
-    @test ins(ins⁻¹(x)) == X
+    X = reshape(x,3,3)
+    @test ins(ins⁻¹(x)) == x
+    @test ins⁻¹(ins(X)) == [0 0 0; 0 X[2,2] 0; 0 0 0 ]
 end
-
 
 function apply_Δ(x::Array{Float64,1}, g::Array{Float64,1})
     n = convert(Int64, √size(x,1))
@@ -47,7 +48,7 @@ function apply_Δ(x::Array{Float64,1}, g::Array{Float64,1})
     X[2:end-1,1] = g[n+3:2:3n+2]
     X[2:end-1,end] = g[n+4:2:3n+2]
     X[end,:] = g[3n+3:4n+4]
-    Y = heat_kernel(X) / (n+1).^2
+    Y = heat_kernel(X) .* (n+1).^2
     return copy(ins(Y))
 end
 
@@ -69,14 +70,19 @@ end
 end
 
 @testset "apply Δ" begin
-    n = 1000
-    x = linrange(0,1,n+2)
-    x = reshape(repeat(x, inner=n+2), n+2, n+2)
-    y = copy(x)
-    u = y.*(1 .- y).*x.^3
+    n = 4
+    x = LinRange(0,1,n+2)
+    xx = reshape(repeat(x, inner=n+2), n+2, n+2)
+    yy = reshape(repeat(x, outer=n+2), n+2, n+2)
+    u = yy.*(1 .- yy).*xx.^3
     g = get_boundary(u)
-    Δu =  -6*x.*y.*(1 .-y)+2*x.^3
-    @test apply_Δ(ins(u),g) ≈ ins(Δu)
+    Δu =  -6*xx.*yy.*(1 .-yy)+2*xx.^3
+    @test norm(apply_Δ(ins(u),g) - ins(Δu) ) <= 1. /(n+1).^2
 end
 
+
+
+#using LinearOperators
+
+#Δ₁₆ = LinearOperators(16,16, false, false, x-
 
