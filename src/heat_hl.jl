@@ -99,21 +99,6 @@ end
     @test norm(apply_Δ(ins(u),g) - ins(Δu) ) <= 1. /(n+1).^2
 end
 
-function compute(g::Array{Float64,1}, T::Float64)
-    m = size(g,1)
-    n = convert(Int64,(m-4) / 4)
-    h = 1. /(n+1)
-    dt = h.^2 /4
-    u = zeros(n+2,n+2)
-    set_boundary!(u, g)
-    for t=dt:dt:T
-        Δu = heat_kernel(u) .* (n+1).^2
-        u[2:end-1,2:end-1] -= dt .* Δu[2:end-1,2:end-1]
-    end
-    return u
-end
-
-
 function get_F(g::Array{Float64,1})
     m = size(g,1)
     n = convert(Int64,(m-4) / 4)
@@ -140,29 +125,41 @@ function U_final(g::Array{Float64,1}, T::Float64)
     return  u
 end
 
-@testset "Non regression compute" begin
-    g = rand(16)
-    @test ins(compute(g, 1.)) ≈ U_final(g,1.)
-end
-
-
 """
 computes the derivative of `F` function respect to `p` 
 in the state equation 
 Uⁿ⁺¹ = F(Uⁿ, p)
 """
-function ∂ₚF(u::Array{Float64,1},p::Array{Float64,1})
+function ∂ₚF_dense(p::Array{Float64,1})
     F,u0, dt = get_F(p)
     P = size(p, 1)
-    M = size(u, 1)
+    M = convert(Int64,((P-4)/4).^2)
     g = zeros(M,P)
     for i=1:M
        for j=1:P
-        g[i,j]= [1. * (k==i) for k=1:M]'*F(u,[1. * (k==j) for k=1:P]) 
+           g[i,j]= [1. * (k==i) for k=1:M]'*F(zeros(M),[1. * (k==j) for k=1:P]) 
        end
     end 
     return g
 end 
+
+"""
+computes the constant (because F is linear) ∂ₚF in a sparse way
+"""
+function ∂ₚF(n::Int64)
+
+    l2c = (i,j) -> 1 .+ (j .-2) .* n .+ (i .- 2)
+    r1 = [3:n;]
+    Is = [ l2c(2,r1) ; l2c(r1, n+1) ; l2c(r1,2.) ; l2c(n+1,r1) ]
+    Js = [ r1 ; 2 .*r1 .+ n ; 2 .*r1 .+ (n-1) ; r1 .+ (3n+2)] 
+    Vs =  -ones(4n-8)
+    Is = [Is ; ones(2)  ; l2c(n+1,n+1)*ones(2); l2c(2,n+1)*ones(2) ; l2c(n+1,2)*ones(2) ] 
+    Js = [Js ; [[2; n+3]; [3n+2 ; 4n+3 ]      ; [n+1; n+4]         ; [3n+1; 3n+4] ] ]
+    Vs = [Vs ; -ones(8)]
+    F, u0, dt = get_F(zeros(4*n+4))
+    return -dt .* (n+1).^2 * sparse(Is,Js,Vs, n*n,4n+4)
+end 
+
 
 @testset "check ∂ₚF" begin
     P = 16
@@ -177,7 +174,8 @@ end
         fd_g[i,j]= [1. * (k==i) for k=1:M]'*(F(U_rand,p+ [ε * (k==j) for k=1:P])-F(U_rand,p)) / ε
         end
     end
-    @test norm(fd_g-∂ₚF(U_rand,p)) < 10 .^2*ε
+    @test norm(fd_g-∂ₚF(convert(Int64, √M))) < 10 .^2*ε
+    @test norm(fd_g-∂ₚF_dense(p)) < 10 .^2*ε
 end
 
 #using Optim
