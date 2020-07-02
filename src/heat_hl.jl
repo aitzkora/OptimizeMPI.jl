@@ -99,6 +99,10 @@ end
     @test norm(apply_Δ(ins(u),g) - ins(Δu) ) <= 1. /(n+1).^2
 end
 
+"""
+furnish a triplet corresponding to the iterator F for the state equation
+ a initial value `u0`, and the timestep
+"""
 function get_F(g::Array{Float64,1})
     m = size(g,1)
     n = convert(Int64,(m-4) / 4)
@@ -115,6 +119,9 @@ function get_F(g::Array{Float64,1})
     return F, u0, dt
 end
 
+"""
+computes the final value in time T for the solution
+"""
 
 function U_final(g::Array{Float64,1}, T::Float64)
     F, u, dt = get_F(g)
@@ -126,6 +133,13 @@ function U_final(g::Array{Float64,1}, T::Float64)
 end
 
 """
+returns the i-th vector of the canonical base of Rⁿ
+"""
+function 𝓔(n::Int64, i::Int64)
+   return [1. * (k==i) for k=1:n]
+end  
+
+"""
 computes the derivative of `F` function respect to `p` 
 in the state equation 
 Uⁿ⁺¹ = F(Uⁿ, p)
@@ -134,13 +148,7 @@ function ∂ₚF_dense(p::Array{Float64,1})
     F,u0, dt = get_F(p)
     P = size(p, 1)
     M = convert(Int64,((P-4)/4).^2)
-    g = zeros(M,P)
-    for i=1:M
-       for j=1:P
-           g[i,j]= [1. * (k==i) for k=1:M]'*F(zeros(M),[1. * (k==j) for k=1:P]) 
-       end
-    end 
-    return g
+    return [𝓔(M,i)'*F(zeros(M),𝓔(P,j)) for i=1:M, j=1:P]
 end 
 
 """
@@ -167,15 +175,34 @@ end
     p = rand(P)
     F, u0, dt = get_F(p)
     U_rand = rand(M)
-    fd_g = zeros(M,P)
     ε = 1e-8
-    for  i=1:M
-       for  j=1:P
-        fd_g[i,j]= [1. * (k==i) for k=1:M]'*(F(U_rand,p+ [ε * (k==j) for k=1:P])-F(U_rand,p)) / ε
-        end
-    end
-    @test norm(fd_g-∂ₚF(convert(Int64, √M))) < 10 .^2*ε
-    @test norm(fd_g-∂ₚF_dense(p)) < 10 .^2*ε
+    fd_g = [𝓔(M,i)'*(F(U_rand,p+ ε * 𝓔(P,j))-F(U_rand,p)) / ε for i=1:M, j=1:P]
+    @test norm(fd_g-∂ₚF(convert(Int64, √M))) < 10 * ε
+    @test norm(fd_g-∂ₚF_dense(p)) < 10 * ε
+end
+
+
+"""
+computes the partial differential of `F` function respect to `u`
+"""
+function ∂ᵤF_dense(u::Array{Float64,1})
+    M = size(u, 1)
+    P = 4 * convert(Int64, √M) + 4
+    p =zeros(P)
+    F, u0, dt = get_F(p)
+    return [𝓔(M,i)'*F(𝓔(M,j),p) for i=1:M , j=1:M]
+end 
+
+@testset "check ∂ᵤF" begin
+    P = 16
+    M = convert(Int64, ((P-4)/4.)^2)
+    p = rand(P)
+    F, u0, dt = get_F(p)
+    u = rand(M)
+    fd_∇u = zeros(M,M)
+    ε = 1e-8
+    fd_∇u =[𝓔(M,i)'*(F(u+ε*𝓔(M,j),p)-F(u,p)) / ε for i=1:M ,j=1:M]
+    @test norm(fd_∇u-∂ᵤF_dense(u)) < 10 .^2*ε
 end
 
 #using Optim
