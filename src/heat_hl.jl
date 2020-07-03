@@ -205,15 +205,40 @@ end
     @test norm(fd_∇u-∂ᵤF_dense(u)) < 10 .^2*ε
 end
 
-#using Optim
-#n = 5
-#u_cible = rand(n,n)
-#T = 10.
+using Optim
+T = 10.
+
 function simu(g::Array{Float64,1})
-    u_calc = U_final(g,T)
-    return sum((u_cible[2:end-1,2:end-1] - u_calc[2:end-1,2:end-1]).^2)
+    P = size(g,1)
+    n = convert(Int64, (P-4)/4)
+    M = n * n
+    u_f = U_final(g,T)
+    v = sum((u_f - ins(target)).^2)
+    λ  = 2. .*(u_f - ins(target))
+    F, u, dt = get_F(g)
+    fᵤ = ∂ᵤF_dense(u)
+    fₚ = ∂ₚF(n)
+    gₚ = zeros(P) # just for memory
+    bₚ = zeros(M,P) # just for memory, here u₀ does not depend on p
+    ∇f = zeros(P)
+    for t=T:-dt:dt
+        ∇f += fₚ'*λ
+        λ = A * λ 
+    end
+    return v, gₚ + ∇f + bₚ' * λ
 end
-#g_0 = rand(4n-4)
-#res = optimize(simu, g_0)
+
+@testset "check adjoint" begin
+
+  P = 16
+  x0 = rand(P)
+  ε = 1e-8
+  f0, g0 = simu(x0) 
+  g_fd = [(simu(x0+ε*𝓔(16,i))[1]-f0) / ε for i=1:P]
+  @test norm(g_fd-g0)  < 10 * ε
+
+end
+
+#res = optimize(x->simu(x)[1], g_0)
 #sol = Optim.minimizer(res)
-#println("|u-u_cible|²=", simu(sol))
+#println("|u-target|²=", simu(sol))
