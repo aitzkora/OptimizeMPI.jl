@@ -1,5 +1,6 @@
 using LinearAlgebra
 using Test
+using SparseArrays
 
 function heat_kernel(X::Array{Float64,2})
     Y = copy(X)
@@ -103,9 +104,9 @@ end
 furnish a triplet corresponding to the iterator F for the state equation
  a initial value `u0`, and the timestep
 """
-function get_F(g::Array{Float64,1})
-    m = size(g,1)
-    n = convert(Int64,(m-4) / 4)
+function get_F(P::Int64)
+    n = convert(Int64,(P-4) / 4)
+    M = n * n
     h = 1. /(n+1)
     dt = h.^2 /4
     u0 = zeros(n*n)
@@ -123,11 +124,11 @@ end
 computes the final value in time T for the solution
 """
 
-function U_final(g::Array{Float64,1}, T::Float64)
-    F, u, dt = get_F(g)
+function U_final(p::Array{Float64,1}, T::Float64)
+    F, u, dt = get_F(size(p,1))
     @debug "dt = $dt, nb_it = ", floor(Int64,T/dt)
     for t=dt:dt:T
-        u = F(u,g)
+        u = F(u,p)
     end
     return  u
 end
@@ -145,7 +146,7 @@ in the state equation
 Uⁿ⁺¹ = F(Uⁿ, p)
 """
 function ∂ₚF_dense(p::Array{Float64,1})
-    F,u0, dt = get_F(p)
+    F, u0, dt = get_F(size(p, 1))
     P = size(p, 1)
     M = convert(Int64,((P-4)/4).^2)
     return [𝓔(M,i)'*F(zeros(M),𝓔(P,j)) for i=1:M, j=1:P]
@@ -164,7 +165,7 @@ function ∂ₚF(n::Int64)
     Is = [Is ; ones(2)  ; l2c(n+1,n+1)*ones(2); l2c(2,n+1)*ones(2) ; l2c(n+1,2)*ones(2) ] 
     Js = [Js ; [[2; n+3]; [3n+2 ; 4n+3 ]      ; [n+1; n+4]         ; [3n+1; 3n+4] ] ]
     Vs = [Vs ; -ones(8)]
-    F, u0, dt = get_F(zeros(4*n+4))
+    F, u0, dt = get_F(4n+4)
     return -dt .* (n+1).^2 * sparse(Is,Js,Vs, n*n,4n+4)
 end 
 
@@ -173,7 +174,7 @@ end
     P = 16
     M = convert(Int64, ((P-4)/4.)^2)
     p = rand(P)
-    F, u0, dt = get_F(p)
+    F, u0, dt = get_F(P)
     U_rand = rand(M)
     ε = 1e-8
     fd_g = [𝓔(M,i)'*(F(U_rand,p+ ε * 𝓔(P,j))-F(U_rand,p)) / ε for i=1:M, j=1:P]
@@ -185,60 +186,110 @@ end
 """
 computes the partial differential of `F` function respect to `u`
 """
-function ∂ᵤF_dense(u::Array{Float64,1})
-    M = size(u, 1)
+function ∂ᵤF_dense(M::Int64)
     P = 4 * convert(Int64, √M) + 4
-    p =zeros(P)
-    F, u0, dt = get_F(p)
+    p = zeros(P)
+    F, u0, dt = get_F(P)
     return [𝓔(M,i)'*F(𝓔(M,j),p) for i=1:M , j=1:M]
 end 
+
+"""
+computes the partial differential of `F` function respect to `u` in a sparse way
+"""
+function ∂ᵤF(u::Array{Float64,1})
+    M = size(u, 1)
+    n = convert(Int64, √M)
+    P = 4n + 4
+    p = zeros(P)
+    h = 1. /(n+1)
+    dt = h.^2 /4
+    U = ins⁻¹(u)
+    set_boundary!(U,zeros(P))
+    ΔU = heat_kernel(U) .* (n+1).^2 
+    U[2:end-1,2:end-1] -= dt .* ΔU[2:end-1,2:end-1]
+    return ins(U)
+end 
+
 
 @testset "check ∂ᵤF" begin
     P = 16
     M = convert(Int64, ((P-4)/4.)^2)
     p = rand(P)
-    F, u0, dt = get_F(p)
+    F, u0, dt = get_F(P)
     u = rand(M)
     fd_∇u = zeros(M,M)
     ε = 1e-8
     fd_∇u =[𝓔(M,i)'*(F(u+ε*𝓔(M,j),p)-F(u,p)) / ε for i=1:M ,j=1:M]
-    @test norm(fd_∇u-∂ᵤF_dense(u)) < 10 .^2*ε
+    @test norm(fd_∇u-∂ᵤF_dense(M)) < 10 .^2*ε
 end
 
 using Optim
-T = 10.
 
-function simu(g::Array{Float64,1})
-    P = size(g,1)
-    n = convert(Int64, (P-4)/4)
-    M = n * n
-    u_f = U_final(g,T)
-    v = sum((u_f - ins(target)).^2)
-    λ  = 2. .*(u_f - ins(target))
-    F, u, dt = get_F(g)
-    fᵤ = ∂ᵤF_dense(u)
+function create_problem(target::Array{Float64,2}, T::Float64)
+  n = size(target, 1)
+  @assert size(target, 2) == n
+  P = 4n+4
+  M = n * n
+  p0 = zeros(P)
+  function simu(p::Array{Float64,1})
+    u_f = U_final(p, T)
+    v = sum((u_f - vec(target)).^2)
+    λ = 2 .*(u_f - vec(target))
+    F, u, dt = get_F(P)
     fₚ = ∂ₚF(n)
-    gₚ = zeros(P) # just for memory
-    bₚ = zeros(M,P) # just for memory, here u₀ does not depend on p
+
+    # academic aim 
+    gₚ = zeros(P) 
+
+    # just to learn the method , here u₀ does not depend on p 
+    bₚ = zeros(M,P) 
     ∇f = zeros(P)
+
     for t=T:-dt:dt
         ∇f += fₚ'*λ
-        λ = A * λ 
+        # the adjoint equation is quasi the same a state equation
+        λ = ∂ᵤF(λ) 
     end
     return v, gₚ + ∇f + bₚ' * λ
+  end
+  return simu, p0
 end
 
-@testset "check adjoint" begin
+@testset "check ∇g" begin
 
-  P = 16
-  x0 = rand(P)
+  n = 3
+  target = rand(n, n)
   ε = 1e-8
+  T = 10.
+  simu, x0 = create_problem(target, T)
+  P = size(x0, 1)
   f0, g0 = simu(x0) 
   g_fd = [(simu(x0+ε*𝓔(16,i))[1]-f0) / ε for i=1:P]
-  @test norm(g_fd-g0)  < 10 * ε
+  @test norm(g_fd-g0)  < 100 * ε
 
 end
 
-#res = optimize(x->simu(x)[1], g_0)
-#sol = Optim.minimizer(res)
-#println("|u-target|²=", simu(sol))
+using PyPlot
+n = 30 
+T = 5.
+x = LinRange(0.,1., n)
+y = copy(x)
+XX = repeat(x,1,n)
+YY = repeat(y',n,1)
+D = sqrt.((XX .-0.5).^2 .+ (YY .-0.5).^2)
+g = x -> max(0.2 .- x, 0.)
+Z = [g(D[i,j]) for i=1:size(D,1) , j=1:size(D,2)] 
+σ, p0 = create_problem(Z, T)
+f = x-> σ(x)[1]
+
+function ∇f!(g::Array{Float64,1}, p::Array{Float64,1})
+    fp,gp = σ(p)
+    g[:] = gp
+end
+
+res = optimize(f,∇f!, p0, LBFGS())
+p_opt = Optim.minimizer(res)
+u_opt = U_final(p_opt, T)
+U = reshape(u_opt, n,n)
+
+plot_surface(XX,YY,Z-U)
