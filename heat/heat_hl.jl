@@ -231,10 +231,13 @@ function create_problem(target::Array{Float64,2}, T::Float64)
   P = 4n+4
   M = n * n
   p0 = zeros(P)
-  function simu(p::Array{Float64,1})
+  function simu(p::Array{Float64,1}, compute_gradient::Bool = true)
     u_f = U_final(p, T)
     v = sum((u_f - vec(target)).^2)
     λ = 2 .*(u_f - vec(target))
+    if (!compute_gradient) 
+        return v, λ
+    end
     F, u, dt = get_F(P)
     fₚ = ∂ₚF(n)
 
@@ -263,24 +266,22 @@ end
   T = 10.
   simu, x0 = create_problem(target, T)
   P = size(x0, 1)
-  f0, g0 = simu(x0) 
-  g_fd = [(simu(x0+ε*𝓔(16,i))[1]-f0) / ε for i=1:P]
+  f0, g0 = simu(x0, true) 
+  g_fd = [(simu(x0+ε*𝓔(16,i), false)[1]-f0) / ε for i=1:P]
   @test norm(g_fd-g0)  < 100 * ε
 
 end
 
 using PyPlot
-n = 30 
-T = 5.
+n = 15 
+T = 10.
 x = LinRange(0.,1., n)
 y = copy(x)
 XX = repeat(x,1,n)
 YY = repeat(y',n,1)
-D = sqrt.((XX .-0.5).^2 .+ (YY .-0.5).^2)
-g = x -> max(0.2 .- x, 0.)
-Z = [g(D[i,j]) for i=1:size(D,1) , j=1:size(D,2)] 
+Z = exp.(XX).*sin.(YY)
 σ, p0 = create_problem(Z, T)
-f = x-> σ(x)[1]
+f = x-> σ(x, false)[1]
 
 function ∇f!(g::Array{Float64,1}, p::Array{Float64,1})
     fp,gp = σ(p)
