@@ -273,9 +273,9 @@ end
 end
 
 using PyPlot
-n = 15 
+n = 15
 T = 10.
-x = LinRange(0.,1., n)
+x = [ 1. *i /(n+1) for i=1:n ]
 y = copy(x)
 XX = repeat(x,1,n)
 YY = repeat(y',n,1)
