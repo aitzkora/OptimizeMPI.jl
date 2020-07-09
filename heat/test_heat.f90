@@ -88,7 +88,29 @@ contains
 
     end subroutine test_set_boundary
 
+    subroutine test_compute_error()
+      real(c_double) :: h, error, t_final
+      real(c_double) , allocatable :: boundary(:), u_target(:,:), x(:), xx(:,:), yy(:,:)
+      integer(c_int32_t) :: rank_w, size_w, i, proc, n, ierr
 
-
+      call MPI_INIT(ierr)
+      call MPI_COMM_RANK(MPI_COMM_WORLD, rank_w, ierr)
+      call MPI_COMM_SIZE(MPI_COMM_WORLD, size_w, ierr)
+      
+      t_final = 1.d0
+      n = 6
+      proc = 3
+      h = 1.d0 / (n+1) 
+      x = [ (h*i, i=1, n) ]
+      xx = spread(x, 2, n)
+      yy = reshape(spread( x, 1, n), [n,n])
+      u_target = exp( xx ) * sin( yy )
+      boundary = [ (1.d0*i/(4*n+4),i=1,4*n+4)]
+      call compute_error(n, proc, t_final, boundary, u_target, error) 
+      if (rank_w == 0) then
+          call assert_equals_d(7.0749927571023630d0, error)
+      end if
+      call MPI_FINALIZE( ierr )
+    end subroutine test_compute_error
 
 end module test_heat

@@ -14,8 +14,8 @@ if (MPI_FOUND)
   add_library(heat_solve SHARED heat_solve.f90 communications.f90 heat.f90 asserts.f90 mat_utils.f90)
   target_link_libraries(heat_solve ${MPI_Fortran_LIBRARIES})
   install(TARGETS heat_solve DESTINATION ${CMAKE_SOURCE_DIR})
-  add_executable(heat_exe heat_main.f90 heat_solve.f90 communications.f90 heat.f90)
-  target_link_libraries(heat_exe ${MPI_Fortran_LIBRARIES})
+  add_executable(heat_exe heat_main.f90)
+  target_link_libraries(heat_exe heat_solve ${MPI_Fortran_LIBRARIES})
   install(TARGETS heat_exe DESTINATION ${CMAKE_SOURCE_DIR})
   if (MPI_Fortran_LIBRARY_VERSION_STRING)  
     message(STATUS "MPI Version =  ${MPI_Fortran_LIBRARY_VERSION_STRING}")
@@ -26,10 +26,6 @@ if (MPI_FOUND)
     endif()
   endif ()
   include(parse_tests_file.cmake)
-
-
-
-
   parse_tests_file(test_heat.f90 "heat_solve" 9)
 else(MPI_FOUND)
     message(FATAL_ERROR "MPI not found; you NEED it to compile the project")

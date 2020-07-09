@@ -19,7 +19,7 @@ contains
     real(c_double), intent(in) :: boundary(4*n+4)
     real(c_double), intent(out) :: error
 
-    integer(c_int32_t) :: i, n_loc, ierr
+    integer(c_int32_t) :: i, n_loc, ierr, it
     integer(c_int32_t) :: rank_w, size_w, rank_2D, comm2D, type_row
     integer(c_int32_t), parameter :: ndims = 2, North = 1, South = 2, East = 3, West = 4
     logical :: is_master, reorder = .true.
@@ -38,8 +38,8 @@ contains
 
     n_loc = 2 + n / proc
 
-    h = 1.d0 / n
-    dt = h ** 2 / 4.d0
+    h = 1.d0 / (n+1)
+    dt = h ** 2 / 4.d0 
 
     ! construction of the cartesion topology
     dims(1) = proc
@@ -64,14 +64,18 @@ contains
     allocate( u_out(n_loc, n_loc) )
 
     call set_boundary( coords, proc, u_in, boundary )
-    call set_boundary( coords, proc, u_out, boundary )
+    u_out = u_in
     t = 0.d0
+    it = 0
     do 
       if (t > t_final ) exit
       call heat_kernel( u_in, u_out )
+
+      !call print_mat(u_out)
+      u_in = u_in - dt / h**2 * u_out
       call ghosts_swap( comm2D, type_row, neighbour, u_in )
-      u_in = u_out
       t = t + dt
+      it = it +1
     end do
 
     ! We gather the solution on process 0
@@ -101,7 +105,6 @@ contains
     n_loc = size(u, 1)
     n  = (size(boundary, 1) - 4 )/ 4
     u = 0.d0
-    print *, "coo = ", coo
 
     ! upper line :  range [1:n+2]
     if (coo(1) == 0)  then

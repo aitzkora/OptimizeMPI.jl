@@ -65,9 +65,9 @@ contains
 
 ! assert subroutine to test equality between reals
   subroutine assert_equals_d(x, y, prec)
-    real , intent (in) :: x, y
-    real , optional :: prec
-    real :: eps = epsilon(x)
+    real(c_double) , intent (in) :: x, y
+    real(c_double) , optional :: prec
+    real(c_double) :: eps = epsilon(x)
 
     if (present(prec)) then
       eps = prec

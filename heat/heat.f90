@@ -11,6 +11,7 @@ contains
     real(c_double), dimension(:, :), intent(out) :: u_out
     integer(c_int32_t) :: i, j
   
+    u_out = 0.d0
     do j = 2, size( u_in, 2) - 1
       do i = 2, size( u_in, 1) - 1
         u_out(i,j) = 4.d0 * u_in(i,j) - u_in(i - 1, j) - u_in(i + 1, j) & 
