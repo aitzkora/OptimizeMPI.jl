@@ -16,14 +16,14 @@ contains
       call MPI_INIT(ierr)
       call MPI_COMM_RANK(MPI_COMM_WORLD, rank_w, ierr)
       call MPI_COMM_SIZE(MPI_COMM_WORLD, size_w, ierr)
-      proc = 2 
-      n = 10
+      proc = 3
+      n = 6
       n_loc = 2 + n / proc
       allocate( u(n_loc, n_loc) )
 
-      boundary = [(1.d0 * i, i =1,44) ]
+      boundary = [(1.d0 * i, i =1,4*n+4) ]
 
-      call assert_equals(size_w, 4)
+      call assert_equals(size_w, 9)
       call MPI_CART_CREATE( MPI_COMM_WORLD, 2, [proc,proc], [.false.,.false.], .true., comm2D, ierr )
       call MPI_COMM_RANK( comm2D, rank_2D, ierr )
 

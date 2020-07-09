@@ -116,15 +116,16 @@ contains
 
     !! left column : range -> [n+3:3n+2:2]  
     if (coo(2) == 0) then 
-        offset = n+2 + coo(1) * n_loc 
+        offset = n+2 + coo(1) * (2*n_loc -4)
         u(2:n_loc-1, 1) = boundary( offset + 1 : offset + 2*n_loc-4 : 2)
     end if
 
     !! right column : range -> [n+4:3n+2:2]
     if (coo(2) == (proc - 1)) then 
-        offset = n+3 + coo(1) * n_loc 
+        offset = n+3 + coo(1) * (2*n_loc -4)
         u(2:n_loc - 1, size( u, 2 ) ) = boundary( offset + 1 : offset + 2*n_loc-4 : 2)
     end if
+    print  *, coo
     call print_mat(u)
 
   end subroutine set_boundary
