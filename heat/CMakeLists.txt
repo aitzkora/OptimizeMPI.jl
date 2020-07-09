@@ -3,20 +3,33 @@ project (heat_optim)
 enable_language(Fortran)
 
 # Check whether MPI support is available.
+set(MPI_DETERMINE_LIBRARY_VERSION TRUE)
 find_package(MPI)
-include(parse_tests_file.cmake)
 
 if (MPI_FOUND)
   message(STATUS "modules = ${MPI_Fortran_HAVE_F90_MODULE} ${MPI_Fortran_HAVE_F08_MODULE} ${MPI_Fortran_MODULE_DIR} ")
   message(STATUS "MPI found")
   include_directories(${MPI_INCLUDE_PATH})
   include_directories(${MPI_Fortran_MODULE_DIR})
-  add_library(heat_solve SHARED heat_solve.f90 communications.f90 heat.f90 asserts.f90)
+  add_library(heat_solve SHARED heat_solve.f90 communications.f90 heat.f90 asserts.f90 mat_utils.f90)
   target_link_libraries(heat_solve ${MPI_Fortran_LIBRARIES})
   install(TARGETS heat_solve DESTINATION ${CMAKE_SOURCE_DIR})
   add_executable(heat_exe heat_main.f90 heat_solve.f90 communications.f90 heat.f90)
   target_link_libraries(heat_exe ${MPI_Fortran_LIBRARIES})
   install(TARGETS heat_exe DESTINATION ${CMAKE_SOURCE_DIR})
+  if (MPI_Fortran_LIBRARY_VERSION_STRING)  
+    message(STATUS "MPI Version =  ${MPI_Fortran_LIBRARY_VERSION_STRING}")
+    string(REGEX MATCHALL "\( Open MPI \)+" found_suite ${MPI_Fortran_LIBRARY_VERSION_STRING})
+    if (NOT ${found_suite} STREQUAL "")
+      message(STATUS "We use MPI, then add --oversubscribe to the test command line  ")
+      set(ADD_OVERSUBSCRIBE_TO_MPI "--oversubscribe")
+    endif()
+  endif ()
+  include(parse_tests_file.cmake)
+
+
+
+
   parse_tests_file(test_heat.f90 "heat_solve" 9)
 else(MPI_FOUND)
     message(FATAL_ERROR "MPI not found; you NEED it to compile the project")

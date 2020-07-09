@@ -1,6 +1,7 @@
 module test_heat
     use heat_solve
     use asserts
+    use mat_utils
     implicit none
 
 contains
@@ -11,7 +12,7 @@ contains
       integer(c_int32_t), parameter :: ndims = 2, North = 1, South = 2, East = 3, West = 4
       logical :: is_master, reorder = .true.
       integer(c_int32_t) :: neighbour(4), coords(2)
-      real(c_double) , allocatable :: boundary(:), u(:,:)
+      real(c_double) , allocatable :: boundary(:), u(:,:), u_check(:,:)
 
       call MPI_INIT(ierr)
       call MPI_COMM_RANK(MPI_COMM_WORLD, rank_w, ierr)
@@ -32,9 +33,58 @@ contains
 
       call set_boundary(coords, proc, u, boundary)
 
+      select case(rank_w) 
+        case(0) 
+            u_check = 1.d0 * reshape([[1 ,2,3,4],&
+                                      [9 ,0,0,0],&
+                                      [11,0,0,0],&
+                                      [13,0,0,0]],[4,4])
+        case(1) 
+            u_check = 1.d0 * reshape([[3 ,4,5,6],&
+                                      [0 ,0,0,0],&
+                                      [00,0,0,0],&
+                                      [00,0,0,0]],[4,4])
+        case(2) 
+            u_check = 1.d0 * reshape([[5,6,7, 8],&
+                                      [0,0,0,10],&
+                                      [0,0,0,12],&
+                                      [0,0,0,14]],[4,4])
+        case(3) 
+            u_check = 1.d0 * reshape([[11,0,0,0],&
+                                      [13,0,0,0],&
+                                      [15,0,0,0],&
+                                      [17,0,0,0]],[4,4])
+        case(4) 
+            u_check = reshape(spread(0.d0, 1, 16), [4,4])
+        case(5) 
+            u_check = 1.d0 * reshape([[0,0,0,12],&
+                                      [0,0,0,14],&
+                                      [0,0,0,16],&
+                                      [0,0,0,18]],[4,4])
+        case(6) 
+            u_check = 1.d0 * reshape([[15, 0, 0, 0],&
+                                      [17, 0, 0, 0],&
+                                      [19, 0, 0, 0],&
+                                      [21,22,23,24]],[4,4])
+        case(7) 
+            u_check = 1.d0 * reshape([[0, 0, 0, 0],&
+                                      [0, 0, 0, 0],&
+                                      [0, 0, 0, 0],&
+                                      [23,24,25,26]],[4,4])
+        case(8) 
+            u_check = 1.d0 * reshape([[0, 0, 0, 16],&
+                                      [0, 0, 0, 18],&
+                                      [0, 0, 0, 20],&
+                                      [25,26,27,28]],[4,4])
+ 
+        case default
+          stop "bad number proc"
+      end select
+      u_check = transpose(u_check)
+      call print_mat( u )
+      call assert_equals( u, u_check)
       deallocate (u)
       call MPI_FINALIZE( ierr )
-      
 
     end subroutine test_set_boundary
 

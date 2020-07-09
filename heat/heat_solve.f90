@@ -1,6 +1,7 @@
 module heat_solve
     use iso_c_binding, only: c_int32_t, c_double
     use iso_fortran_env
+    use mat_utils, only : print_mat
     use mpi
     use heat
     use communications
@@ -100,43 +101,43 @@ contains
     n_loc = size(u, 1)
     n  = (size(boundary, 1) - 4 )/ 4
     u = 0.d0
+    print *, "coo = ", coo
 
     ! upper line :  range [1:n+2]
     if (coo(1) == 0)  then
-       offset = coo(2)*(n_loc - 2)
-       print *, "coo = ", coo
-       u(1, 2:n_loc-1) = boundary(offset + 2: offset + n_loc -1)
+       offset = coo(2)*(n_loc-2)
+       u(1, 1:n_loc) = boundary(offset + 1: offset + n_loc )
     end if
 
     ! lower line : range -> [3n+3:4n+4]
     if (coo(1) == (proc - 1)) then 
-        offset = 3*n+2 + coo(2) * (n_loc-2)
-        u(size( u, 1 ),  2 : n_loc -1 ) = boundary( offset + 2: offset + n_loc -1)
+        offset = 3*n+2 + coo(2) * (n_loc-2) 
+        u(size( u, 1 ),  1 : n_loc  ) = boundary( offset + 1: offset + n_loc )
     endif
 
     !! left column : range -> [n+3:3n+2:2]  
     if (coo(2) == 0) then 
-        offset = n+2 + coo(1) * (2*n_loc -4)
-        u(2:n_loc-1, 1) = boundary( offset + 1 : offset + 2*n_loc-4 : 2)
+      offset = n+2 + coo(1) * (2*n_loc -4) 
+      if (coo(1) /= 0) then
+        u(1:n_loc, 1) = boundary( offset -1: offset + 2*n_loc-2 : 2)
+      elseif (coo(1) == (proc -1) ) then
+        u(1:n_loc-1, 1) = boundary( offset + 1 : offset + 2*n_loc-2 : 2)
+      else
+        u(2:n_loc, 1) = boundary( offset + 1 : offset + 2*n_loc-2 : 2)
+      end if
     end if
-
     !! right column : range -> [n+4:3n+2:2]
     if (coo(2) == (proc - 1)) then 
-        offset = n+3 + coo(1) * (2*n_loc -4)
-        u(2:n_loc - 1, size( u, 2 ) ) = boundary( offset + 1 : offset + 2*n_loc-4 : 2)
+        offset = n+3 + coo(1) * (2*n_loc -4) 
+        if (coo(1) == (proc - 1 ) ) then
+          u(1:n_loc-1, size(u, 2) ) = boundary( offset - 1 : offset + 2*n_loc-4 : 2)
+        else if (coo(1) /= 0) then
+          u(1:n_loc, size( u, 2 ) ) = boundary( offset - 1 : offset + 2*n_loc-2 : 2)
+        else 
+          u(2:n_loc, size( u, 2 ) ) = boundary( offset + 1 : offset + 2*n_loc-2 : 2)
+        end if
     end if
-    print  *, coo
-    call print_mat(u)
 
   end subroutine set_boundary
-
-  subroutine print_mat( u )
-      implicit none
-      character(len=48) :: variable_format
-      real(kind=8), intent(in) :: u(:,:)
-      write (variable_format, '(ai0ai0a)') "(", size( u, 1 ), "(", size( u, 2 ), "(1xf8.5)/))"
-      write (output_unit, variable_format) transpose(u)
-    end subroutine print_mat
-
 
 end module heat_solve

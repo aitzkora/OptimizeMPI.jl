@@ -1,8 +1,9 @@
 module asserts
 
+  use iso_c_binding
   implicit none
   public :: assert_equals
-
+  
   interface assert_equals
 
     module procedure :: assert_equals_d
@@ -11,6 +12,7 @@ module asserts
     module procedure :: assert_equals_integer
     module procedure :: assert_equals_string
     module procedure :: assert_equals_logical
+    module procedure :: assert_equals_d_mat
 
   end interface
 
@@ -83,6 +85,21 @@ contains
 
     if (sum(abs(x-y))>prec) then
       print *, abs(x-y)
+      stop -1
+    end if
+
+  end subroutine
+
+  subroutine assert_equals_d_mat(x, y, prec)
+    real(c_double) , intent (in) :: x(:,:), y(:,:)
+    real(c_double) , optional :: prec
+    real(c_double) :: eps = epsilon(x)
+
+    if (present(prec)) then
+      eps = prec
+    end if
+     if (sum(abs(x-y))>eps) then
+      print *, sum(abs(x-y))
       stop -1
     end if
 

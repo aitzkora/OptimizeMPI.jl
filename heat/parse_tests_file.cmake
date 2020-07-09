@@ -54,7 +54,7 @@ foreach(name ${test_names})
     if (use_mpi)
         add_test(
         NAME ${name} 
-        COMMAND ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${nb_procs} ${filename_we} ${name}
+        COMMAND ${MPIEXEC} ${ADD_OVERSUBSCRIBE_TO_MPI} ${MPIEXEC_NUMPROC_FLAG} ${nb_procs} ${filename_we} ${name}
         ) 
     else()
         add_test(NAME ${name} COMMAND ${filename_we} ${name})
