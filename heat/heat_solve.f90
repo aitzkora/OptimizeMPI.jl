@@ -6,11 +6,12 @@ module heat_solve
     use heat
     use communications
     implicit none
-    public :: compute_error, set_boundary
+    private 
+    public :: compute_error, set_boundary, compute_f_p_t
  
 contains
 
-  subroutine compute_error(n, proc, t_final, boundary, u_target, error) bind( C, name="compute_error" )
+  subroutine compute_error(n, proc, t_final, boundary, u_target, error, gradient) bind( C, name="compute_error" )
 
     integer(c_int32_t), intent(in) :: n ! size of the global square matrix
     integer(c_int32_t), intent(in) :: proc ! nb of processes (in each dimensions)
@@ -18,6 +19,7 @@ contains
     real(c_double), intent(in) :: u_target(1:n, 1:n)
     real(c_double), intent(in) :: boundary(4*n+4)
     real(c_double), intent(out) :: error
+    real(c_double), optional, intent(out) :: gradient(:)
 
     integer(c_int32_t) :: i, n_loc, ierr, it
     integer(c_int32_t) :: rank_w, size_w, rank_2D, comm2D, type_row
@@ -26,11 +28,12 @@ contains
     integer(c_int32_t), dimension(4) :: neighbour
     real(c_double) :: h, dt, error_loc, t
     real(c_double), allocatable :: u_in(:,:), u_out(:,:), sol_space(:,:)
+    real(c_double), allocatable :: lambda(:,:), lambda_tmp(:,:), f_p(:)
 
-    integer(c_int32_t), dimension(ndims) :: dims , coords
-    logical, dimension(ndims) :: periods = .false.
+    integer(c_int32_t):: dims(ndims) , coords(ndims), offset_1, offset_2
+    logical :: periods(ndims) = [.false., .false.], with_gradient
 
-
+    
     call MPI_COMM_RANK(MPI_COMM_WORLD, rank_w, ierr)
     call MPI_COMM_SIZE(MPI_COMM_WORLD, size_w, ierr)
 
@@ -40,6 +43,16 @@ contains
 
     h = 1.d0 / (n+1)
     dt = h ** 2 / 4.d0 
+    
+    if (present(gradient)) then
+        with_gradient = .true.
+        allocate(lambda(n_loc, n_loc))
+        allocate(lambda_tmp, mold=lambda)
+        allocate(f_p, mold=gradient)
+        gradient = 0.d0
+    else
+        with_gradient = .false.
+    end if
 
     ! construction of the cartesion topology
     dims(1) = proc
@@ -66,23 +79,43 @@ contains
     call set_boundary( coords, proc, u_in, boundary )
     u_out = u_in
     t = 0.d0
-    it = 0
+    ! forward phase
     do 
       if (t > t_final ) exit
       u_out = heat_kernel( u_in )
       u_in = u_in - dt / h**2 * u_out
       call ghosts_swap( comm2D, type_row, neighbour, u_in )
       t = t + dt
-      it = it +1
     end do
 
     ! We gather the solution on process 0
+    ! FIXME : unecessary, the gather is not required to compute the error
     allocate ( sol_space(n, n) )
     call gather_solution( sol_space, n, u_in, ndims, comm2D, is_master )
     if (is_master) then
       error = sum( (sol_space-u_target)**2)
     end if
     call MPI_Bcast(error, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    if ( with_gradient ) then
+      ! backward  phase
+      offset_1 = coords(1) * (n_loc - 2)
+      offset_2 = coords(2) * (n_loc - 2)
+      lambda(2:n_loc-1, 2:n_loc-1) = 2.d0 * (u_in(2:n_loc-1,2:n_loc-1) - & 
+              u_target(offset_1 + 1 : offset_1 + n_loc-2, offset_2 + 1 : offset_2 + n_loc - 2))
+      do
+        if (t <= 0) exit
+        ! ∇f += ∂ₚFᵀ(λ)
+        call compute_f_p_t(coords, proc, lambda(2:n_loc-1, 2:n_loc-1), f_p)
+        gradient = gradient + f_p  
+        ! λₙ₊₁ = ∂ᵤF(λₙ)
+        lambda_tmp = heat_kernel( lambda )
+        lambda = lambda - dt * (n+1)**2 * lambda_tmp
+        t = t - dt
+      end do
+      deallocate (f_p)
+      deallocate (lambda_tmp)
+      deallocate (lambda)
+    end if
     deallocate( sol_space )
 
     deallocate( u_in )
@@ -158,33 +191,35 @@ contains
     f_p = 0.d0  
     f_p_loc = 0.d0
 
-    ! upper line :  range [1:n+2]
+    ! upper line 
     if (coo(1) == 0)  then
       offset = coo(2)*(n_loc-2)
-      f_p_loc(offset + 2 : offset + n_loc -1) = f_p_loc(offset + 2 : offset + n_loc-1) & 
-                                               - lambda_loc(1, : )
-
+      associate ( f => f_p_loc(offset + 2 : offset + n_loc -1) )
+        f = f - lambda_loc(1, :)
+      end associate
     end if
 
-    !lower line : range -> [3n+3:4n+4]
+    ! lower line 
     if (coo(1) == (proc - 1)) then 
       offset = 3*n+2 + coo(2) * (n_loc-2) 
-      f_p_loc(offset + 2 : offset + n_loc -1) = f_p_loc(offset + 2 : offset + n_loc -1) &
-                                            - lambda_loc(n_loc-2, :)
+      associate ( f => f_p_loc(offset + 2 : offset + n_loc -1))
+        f = f - lambda_loc(n_loc-2, :)
+    end associate
     endif
 
-    !!! left column : range -> [n+3:3n+2:2]  
+    ! left column 
     if (coo(2) == 0) then 
       offset = coo(1) * (2 *n_loc - 4) + n + 1 
-      !print *, size(f_p_loc(offset + 2 : offset + 2*n_loc-4 : 2), 1)
-      f_p_loc(offset + 2 : offset + 2*n_loc-4 : 2) = f_p_loc(offset + 2 : offset + 2*n_loc-4 : 2) &
-                                                   - lambda_loc(:, 1)
+      associate ( f => f_p_loc(offset + 2 : offset + 2*n_loc-4 : 2) )
+        f  = f - lambda_loc(:, 1)
+      end associate
     end if
-    !!!! right column : range -> [n+4:3n+2:2]
+    ! right column 
     if (coo(2) == (proc - 1)) then 
       offset = coo(1) * (2*n_loc - 4) + n + 2
-      f_p_loc(offset + 2 : offset + 2*n_loc -4 :2) = f_p_loc(offset + 2 : offset + 2*n_loc -4 :2) & 
-                                                   - lambda_loc( : , n_loc - 2)
+      associate ( f => f_p_loc(offset + 2 : offset + 2*n_loc -4 :2) )
+        f = f - lambda_loc( : , n_loc - 2)
+      end associate
     end if
 
 

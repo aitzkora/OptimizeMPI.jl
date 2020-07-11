@@ -2,6 +2,7 @@ module test_heat
     use heat_solve
     use asserts
     use mat_utils
+    use mpi
     implicit none
 
 contains
@@ -9,9 +10,8 @@ contains
     subroutine test_set_boundary
       integer(c_int32_t) :: i, n_loc, ierr, proc, n
       integer(c_int32_t) :: rank_w, size_w, rank_2D, comm2D
-      integer(c_int32_t), parameter :: ndims = 2, North = 1, South = 2, East = 3, West = 4
-      logical :: is_master, reorder = .true.
-      integer(c_int32_t) :: neighbour(4), coords(2)
+      integer(c_int32_t), parameter :: ndims = 2
+      integer(c_int32_t) :: coords(ndims)
       real(c_double) , allocatable :: boundary(:), u(:,:), u_check(:,:)
 
       call MPI_INIT(ierr)
@@ -25,7 +25,7 @@ contains
       boundary = [(1.d0 * i, i =1,4*n+4) ]
 
       call assert_equals(size_w, 9)
-      call MPI_CART_CREATE( MPI_COMM_WORLD, 2, [proc,proc], [.false.,.false.], .true., comm2D, ierr )
+      call MPI_CART_CREATE( MPI_COMM_WORLD, ndims, [proc,proc], [.false.,.false.], .true., comm2D, ierr )
       call MPI_COMM_RANK( comm2D, rank_2D, ierr )
 
       !! Fetch the processus coordinates in the 2-D grid
@@ -111,6 +111,41 @@ contains
       end if
       call MPI_FINALIZE( ierr )
     end subroutine test_compute_error
+
+    subroutine test_compute_gradient()
+      real(c_double) :: h, error, t_final
+      real(c_double) , allocatable :: x(:), xx(:,:), yy(:,:)
+      real(c_double) , allocatable :: boundary(:), u_target(:,:), grad(:), grad_check(:)
+      integer(c_int32_t) :: rank_w, size_w, i, proc, n, ierr, p
+
+      call MPI_INIT(ierr)
+      call MPI_COMM_RANK(MPI_COMM_WORLD, rank_w, ierr)
+      call MPI_COMM_SIZE(MPI_COMM_WORLD, size_w, ierr)
+      
+      t_final = 1.d0
+      n = 6
+      proc = 3
+      h = 1.d0 / (n+1) 
+      p = 4*n+ 4
+      x = [ (h*i, i=1, n) ]
+      xx = spread(x, 2, n)
+      yy = reshape(spread( x, 1, n), [n,n])
+      u_target = exp( xx ) * sin( yy )
+      boundary = [ (1.d0*i/p,i=1,p)]
+      grad = spread(0.d0, 1, p)
+      call compute_error(n, proc, t_final, boundary, u_target, error, grad) 
+      grad_check = [ 0.0d0, -0.09842815768006086d0, -0.4374761608700516d0, -0.8300004174911652d0, &
+                     -1.1406120122679873d0, -1.2351524529267455d0, -0.9449325930916592d0, 0.0d0, -0.09842815768006086d0, &
+                     -0.9449325930916592d0, -0.12776638217426417d0, -1.462891498489563d0, -0.10490816071833992d0, & 
+                     -1.7652324922933025d0, -0.038871413460823526d0, -1.9083984256932705d0, 0.05531777209912303d0, &
+                     -1.841839556884301d0, 0.1271842280918711d0, -1.3711354111606837d0, 0.0d0, 0.1271842280918711d0, &
+                     -0.28458767577979044d0, -0.8661527030471672d0, -1.3900462605967137d0, -1.6513420741741534d0, &
+                     -1.3711354111606837d0, 0.0d0 ]
+      !if (rank_w == 0) then
+      !    call assert_equals_d_vec(grad_check, grad , 100.d0 * epsilon(1.d0))
+      !end if
+      call MPI_FINALIZE( ierr )
+    end subroutine test_compute_gradient
 
 
     subroutine test_f_p()
