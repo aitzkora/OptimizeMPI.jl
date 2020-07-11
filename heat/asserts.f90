@@ -7,6 +7,7 @@ module asserts
   interface assert_equals
 
     module procedure :: assert_equals_d
+    module procedure :: assert_equals_d_vec
     module procedure :: assert_equals_vec
     module procedure :: assert_equals_integer_vec
     module procedure :: assert_equals_integer
@@ -81,13 +82,29 @@ contains
 
 
   subroutine assert_equals_vec(x, y, prec)
-    real , intent (in) :: x(:), y(:), prec
+    real(kind=4) , intent (in) :: x(:), y(:), prec
 
     if (sum(abs(x-y))>prec) then
       print *, abs(x-y)
       stop -1
     end if
 
+  end subroutine
+  
+  subroutine assert_equals_d_vec(x, y, prec)
+    real(c_double) , intent (in) :: x(:), y(:)
+    real(c_double) , optional, intent(in) :: prec
+    real(c_double) :: eps = epsilon(x)
+    if (present(prec)) then
+      eps = prec
+    end if
+    if (size(x, 1) /= size(y, 1)) then
+        stop "compare two vec with differents size"
+    end if
+    if (sum(abs(x-y))>prec) then
+      print *, abs(x-y)
+      stop -1
+    end if
   end subroutine
 
   subroutine assert_equals_d_mat(x, y, prec)

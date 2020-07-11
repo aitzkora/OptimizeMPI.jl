@@ -69,9 +69,7 @@ contains
     it = 0
     do 
       if (t > t_final ) exit
-      call heat_kernel( u_in, u_out )
-
-      !call print_mat(u_out)
+      u_out = heat_kernel( u_in )
       u_in = u_in - dt / h**2 * u_out
       call ghosts_swap( comm2D, type_row, neighbour, u_in )
       t = t + dt
@@ -142,5 +140,60 @@ contains
     end if
 
   end subroutine set_boundary
+
+  subroutine compute_f_p_t(coo, proc, lambda_loc, f_p)
+
+    integer, intent(in) :: coo(2)
+    integer, intent(in) :: proc
+    real(c_double), intent(in) :: lambda_loc(:,:)
+    real(c_double), intent(out) :: f_p(:)
+    real(c_double), allocatable :: f_p_loc(:)
+    real(c_double) :: dt, h
+    integer :: n_loc, offset, n, i, ierr, p
+
+    n_loc = size(lambda_loc, 1) + 2
+    n = (n_loc - 2) * proc
+    p = 4 * n + 4
+    allocate (f_p_loc(p))
+    f_p = 0.d0  
+    f_p_loc = 0.d0
+
+    ! upper line :  range [1:n+2]
+    if (coo(1) == 0)  then
+      offset = coo(2)*(n_loc-2)
+      f_p_loc(offset + 2 : offset + n_loc -1) = f_p_loc(offset + 2 : offset + n_loc-1) & 
+                                               - lambda_loc(1, : )
+
+    end if
+
+    !lower line : range -> [3n+3:4n+4]
+    if (coo(1) == (proc - 1)) then 
+      offset = 3*n+2 + coo(2) * (n_loc-2) 
+      f_p_loc(offset + 2 : offset + n_loc -1) = f_p_loc(offset + 2 : offset + n_loc -1) &
+                                            - lambda_loc(n_loc-2, :)
+    endif
+
+    !!! left column : range -> [n+3:3n+2:2]  
+    if (coo(2) == 0) then 
+      offset = coo(1) * (2 *n_loc - 4) + n + 1 
+      !print *, size(f_p_loc(offset + 2 : offset + 2*n_loc-4 : 2), 1)
+      f_p_loc(offset + 2 : offset + 2*n_loc-4 : 2) = f_p_loc(offset + 2 : offset + 2*n_loc-4 : 2) &
+                                                   - lambda_loc(:, 1)
+    end if
+    !!!! right column : range -> [n+4:3n+2:2]
+    if (coo(2) == (proc - 1)) then 
+      offset = coo(1) * (2*n_loc - 4) + n + 2
+      f_p_loc(offset + 2 : offset + 2*n_loc -4 :2) = f_p_loc(offset + 2 : offset + 2*n_loc -4 :2) & 
+                                                   - lambda_loc( : , n_loc - 2)
+    end if
+
+
+    call MPI_ALLREDUCE(f_p_loc, f_p, 4*n+4, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+    h = 1.d0 / (n + 1)
+    dt = h ** 2 / 4.d0
+    f_p = -dt * f_p  * (n+1)**2
+
+  end subroutine compute_f_p_t
+
 
 end module heat_solve

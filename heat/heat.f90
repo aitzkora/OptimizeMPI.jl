@@ -5,12 +5,13 @@ module heat
 
 contains
 
-  subroutine heat_kernel(u_in, u_out)
+  function heat_kernel(u_in) result(u_out)
     implicit none
-    real(c_double), dimension(:, :), intent(in) :: u_in
-    real(c_double), dimension(:, :), intent(out) :: u_out
+    real(c_double), intent(in) :: u_in(:, :)
+    real(c_double), allocatable :: u_out(:, :)
     integer(c_int32_t) :: i, j
   
+    allocate( u_out, mold = u_in)
     u_out = 0.d0
     do j = 2, size( u_in, 2) - 1
       do i = 2, size( u_in, 1) - 1
@@ -19,6 +20,6 @@ contains
       end do
     end do
   
-  end subroutine heat_kernel
+  end function heat_kernel
 
 end module heat
