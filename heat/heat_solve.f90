@@ -19,7 +19,7 @@ contains
     real(c_double), intent(in) :: u_target(1:n, 1:n)
     real(c_double), intent(in) :: boundary(4*n+4)
     real(c_double), intent(out) :: error
-    real(c_double), optional, intent(out) :: gradient(:)
+    real(c_double), optional, intent(out) :: gradient(4*n+4)
 
     integer(c_int32_t) :: i, n_loc, ierr, it
     integer(c_int32_t) :: rank_w, size_w, rank_2D, comm2D, type_row
@@ -27,8 +27,8 @@ contains
     logical :: is_master, reorder = .true.
     integer(c_int32_t), dimension(4) :: neighbour
     real(c_double) :: h, dt, error_loc, t
-    real(c_double), allocatable :: u_in(:,:), u_out(:,:)
-    real(c_double), allocatable :: lambda(:,:), lambda_tmp(:,:), f_p(:)
+    real(c_double), allocatable :: u_in(:,:), u_out(:,:), sol_space(:,:), target_loc(:,:), target_ext(:,:)
+    real(c_double), allocatable :: lambda(:,:), lambda_tmp(:,:), f_p(:), zeros(:)
 
     integer(c_int32_t):: dims(ndims) , coords(ndims), offset_1, offset_2
     logical :: periods(ndims) = [.false., .false.], with_gradient
@@ -47,9 +47,13 @@ contains
     if (present(gradient)) then
         with_gradient = .true.
         allocate(lambda(n_loc, n_loc))
-        allocate(lambda_tmp, mold=lambda)
         allocate(f_p, mold=gradient)
         gradient = 0.d0
+        zeros = spread(0.d0, 1, 4*n+4)
+        allocate(target_loc, mold=lambda)
+        allocate(target_ext(n+2,n+2))
+        target_ext = 0.d0 
+        target_ext(2:n+1,2:n+1) = u_target
     else
         with_gradient = .false.
     end if
@@ -88,20 +92,22 @@ contains
       t = t + dt
     end do
 
-    ! compute the error
-    offset_1 = coords(1) * (n_loc - 2)
-    offset_2 = coords(2) * (n_loc - 2)
-    error_loc = sum( (u_in(2:n_loc-1,2:n_loc-1) - &
-                      u_target(offset_1 + 1 : offset_1 + n_loc-2, offset_2 + 1 : offset_2 + n_loc - 2))**2)
-
-    call MPI_ALLREDUCE(error_loc, error, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
- 
-    ! compute the gradient by adjoint recursion
+    ! We gather the solution on process 0
+    ! FIXME : unecessary, the gather is not required to compute the error
+    allocate ( sol_space(n, n) )
+    call gather_solution( sol_space, n, u_in, ndims, comm2D, is_master )
+    if (is_master) then
+      error = sum( (sol_space-u_target)**2)
+    end if
+    call MPI_Bcast(error, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
     if ( with_gradient ) then
-
-      ! λ = 2 u - u_target)
-      lambda(2:n_loc-1, 2:n_loc-1) = 2.d0 * (u_in(2:n_loc-1,2:n_loc-1) - & 
-              u_target(offset_1 + 1 : offset_1 + n_loc-2, offset_2 + 1 : offset_2 + n_loc - 2))
+      ! backward  phase
+      associate (of_x => coords(1) * (n_loc-2), of_y => coords(2) * (n_loc-2))
+       target_loc = target_ext(of_x + 1 : of_x + n_loc, of_y + 1 : of_y + n_loc) 
+      end associate
+      lambda= 2.d0 * (u_in - target_loc)
+      call set_boundary( coords, proc, lambda, zeros)
+      t = t_final 
       do
         if (t <= 0) exit
         ! ∇f += ∂ₚFᵀ(λ)
@@ -110,20 +116,22 @@ contains
         ! λₙ₊₁ = ∂ᵤF(λₙ)
         lambda_tmp = heat_kernel( lambda )
         lambda = lambda - dt * (n+1)**2 * lambda_tmp
+        call ghosts_swap( comm2D, type_row, neighbour, lambda )
+        call set_boundary(coords, proc, lambda, zeros)
         t = t - dt
       end do
       deallocate (f_p)
-      deallocate (lambda_tmp)
       deallocate (lambda)
     end if
 
     deallocate( u_in )
     deallocate( u_out )
-
+     
     call MPI_TYPE_FREE( type_row, ierr )
 
   end subroutine compute_error
 
+  ! beware, this function claims for putting zeroes on the boundary not inside!
   subroutine set_boundary(coo, proc, u, boundary)
 
     integer, intent(in) :: proc
@@ -134,7 +142,6 @@ contains
 
     n_loc = size(u, 1)
     n  = (size(boundary, 1) - 4 )/ 4
-    u = 0.d0
 
     ! upper line :  range [1:n+2]
     if (coo(1) == 0)  then

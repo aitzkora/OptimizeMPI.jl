@@ -141,9 +141,13 @@ contains
                      -1.841839556884301d0, 0.1271842280918711d0, -1.3711354111606837d0, 0.0d0, 0.1271842280918711d0, &
                      -0.28458767577979044d0, -0.8661527030471672d0, -1.3900462605967137d0, -1.6513420741741534d0, &
                      -1.3711354111606837d0, 0.0d0 ]
-      !if (rank_w == 0) then
-      !    call assert_equals_d_vec(grad_check, grad , 100.d0 * epsilon(1.d0))
+
+      !if (rank_w ==  0) then 
+      !    print '(8(1xf9.5)/6((1xf9.5)61xf9.5/)8(1xf9.5))', grad_check-grad
       !end if
+      if (rank_w == 0) then
+          call assert_equals_d_vec(grad_check, grad , 100.d0 * epsilon(1.d0))
+      end if
       call MPI_FINALIZE( ierr )
     end subroutine test_compute_gradient
 
