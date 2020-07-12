@@ -15,55 +15,41 @@ contains
 
     integer(c_int32_t), intent(in) :: n ! size of the global square matrix
     integer(c_int32_t), intent(in) :: proc ! nb of processes (in each dimensions)
-    real(c_double), intent(in) :: t_final
+    real(c_double), intent(in) :: t_final 
     real(c_double), intent(in) :: u_target(1:n, 1:n)
     real(c_double), intent(in) :: boundary(4*n+4)
     real(c_double), intent(out) :: error
     real(c_double), optional, intent(out) :: gradient(4*n+4)
 
+    integer(c_int32_t), parameter :: ndims = 2, North = 1, South = 2, East = 3, West = 4
     integer(c_int32_t) :: n_loc, ierr, p
     integer(c_int32_t) :: rank_w, size_w, rank_2D, comm2D, type_row
-    integer(c_int32_t), parameter :: ndims = 2, North = 1, South = 2, East = 3, West = 4
-    logical :: is_master, reorder = .true.
-    integer(c_int32_t), dimension(4) :: neighbour
+    integer(c_int32_t) :: neighbour(4)
+
     real(c_double) :: h, dt, error_loc, t
     real(c_double), allocatable :: u_in(:,:), u_out(:,:), target_loc(:,:), target_ext(:,:)
     real(c_double), allocatable :: lambda(:,:), lambda_tmp(:,:), f_p(:), zeros(:)
 
-    integer(c_int32_t):: dims(ndims) , coords(ndims)
-    logical :: periods(ndims) = [.false., .false.], with_gradient
+    integer(c_int32_t) :: dims(ndims) , coords(ndims)
+    
+    logical, parameter :: reorder = .true.
+    logical :: periods(ndims) = [.false., .false.]
+    logical :: with_gradient
 
     
     call MPI_COMM_RANK(MPI_COMM_WORLD, rank_w, ierr)
     call MPI_COMM_SIZE(MPI_COMM_WORLD, size_w, ierr)
 
-    is_master = (rank_w == 0)
-
     n_loc = 2 + n / proc
     p = 4 * n + 4
 
+    ! numerical constants
     h = 1.d0 / (n+1)
     dt = h ** 2 / 4.d0 
    
-    allocate(target_loc(n_loc, n_loc))
-
-    allocate(target_ext(n+2,n+2))
-    target_ext = 0.d0 
-    target_ext(2:n+1,2:n+1) = u_target
- 
-    if (present(gradient)) then
-        with_gradient = .true.
-        allocate(lambda(n_loc, n_loc))
-        allocate(f_p(p))
-        gradient = 0.d0
-        zeros = spread(0.d0, 1, p)
-    else
-        with_gradient = .false.
-    end if
 
     ! construction of the cartesion topology
-    dims(1) = proc
-    dims(2) = proc
+    dims(:) = proc
 
     call MPI_CART_CREATE( MPI_COMM_WORLD, ndims, dims, periods, reorder, comm2D, ierr )
     call MPI_COMM_RANK( comm2D, rank_2D, ierr )
@@ -80,14 +66,31 @@ contains
     call MPI_CART_SHIFT(COMM2D, 0, 1, neighbour( North ), neighbour( South ), ierr )
     call MPI_CART_SHIFT(COMM2D, 1, 1, neighbour( West ), neighbour( East ), ierr )
 
+    ! allocation and initialization
+    allocate(target_ext(n+2,n+2))
+    target_ext = 0.d0 
+    target_ext(2:n+1,2:n+1) = u_target
+    allocate(target_loc(n_loc, n_loc))
+ 
+    if (present(gradient)) then
+        with_gradient = .true.
+        allocate(lambda(n_loc, n_loc))
+        allocate(f_p(p))
+        gradient = 0.d0
+        zeros = spread(0.d0, 1, p)
+    else
+        with_gradient = .false.
+    end if
+
     allocate( u_in(n_loc, n_loc) ) 
     allocate( u_out(n_loc, n_loc) )
     u_in = 0.d0
     u_out = 0.d0
     call set_boundary( coords, proc, u_in, boundary )
     u_out = u_in
-    t = 0.d0
+
     ! forward phase
+    t = 0.d0
     do 
       if (t > t_final ) exit
       u_out = heat_kernel( u_in )
@@ -112,11 +115,14 @@ contains
         ! ∇f += ∂ₚFᵀ(λ)
         call compute_f_p_t(coords, proc, lambda(2:n_loc-1, 2:n_loc-1), f_p)
         gradient = gradient + f_p  
-        ! λₙ₊₁ = ∂ᵤF(λₙ)
+        
+        ! λₙ₊₁ = ∂ᵤF(λₙ) 
         lambda_tmp = heat_kernel( lambda )
         lambda = lambda - dt * (n+1)**2 * lambda_tmp
         call ghosts_swap( comm2D, type_row, neighbour, lambda )
         call set_boundary(coords, proc, lambda, zeros)
+
+        ! update t
         t = t - dt
       end do
       deallocate (f_p)
@@ -170,11 +176,11 @@ contains
     if (coo(2) == (proc - 1)) then 
         offset = n+3 + coo(1) * (2*n_loc -4) 
         if (coo(1) == (proc - 1 ) ) then
-          u(1:n_loc-1, size(u, 2) ) = boundary( offset - 1 : offset + 2*n_loc-4 : 2)
+          u(1:n_loc-1, n_loc ) = boundary(offset - 1 : offset + 2*n_loc-4 : 2)
         else if (coo(1) /= 0) then
-          u(1:n_loc, size( u, 2 ) ) = boundary( offset - 1 : offset + 2*n_loc-2 : 2)
+          u(1:n_loc, n_loc) = boundary(offset - 1 : offset + 2*n_loc-2 : 2)
         else 
-          u(2:n_loc, size( u, 2 ) ) = boundary( offset + 1 : offset + 2*n_loc-2 : 2)
+          u(2:n_loc, n_loc) = boundary(offset + 1 : offset + 2*n_loc-2 : 2)
         end if
     end if
 
