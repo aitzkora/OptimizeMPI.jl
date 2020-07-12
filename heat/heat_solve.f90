@@ -21,16 +21,16 @@ contains
     real(c_double), intent(out) :: error
     real(c_double), optional, intent(out) :: gradient(4*n+4)
 
-    integer(c_int32_t) :: i, n_loc, ierr, it
+    integer(c_int32_t) :: n_loc, ierr, p
     integer(c_int32_t) :: rank_w, size_w, rank_2D, comm2D, type_row
     integer(c_int32_t), parameter :: ndims = 2, North = 1, South = 2, East = 3, West = 4
     logical :: is_master, reorder = .true.
     integer(c_int32_t), dimension(4) :: neighbour
     real(c_double) :: h, dt, error_loc, t
-    real(c_double), allocatable :: u_in(:,:), u_out(:,:), sol_space(:,:), target_loc(:,:), target_ext(:,:)
+    real(c_double), allocatable :: u_in(:,:), u_out(:,:), target_loc(:,:), target_ext(:,:)
     real(c_double), allocatable :: lambda(:,:), lambda_tmp(:,:), f_p(:), zeros(:)
 
-    integer(c_int32_t):: dims(ndims) , coords(ndims), offset_1, offset_2
+    integer(c_int32_t):: dims(ndims) , coords(ndims)
     logical :: periods(ndims) = [.false., .false.], with_gradient
 
     
@@ -40,20 +40,23 @@ contains
     is_master = (rank_w == 0)
 
     n_loc = 2 + n / proc
+    p = 4 * n + 4
 
     h = 1.d0 / (n+1)
     dt = h ** 2 / 4.d0 
-    
+   
+    allocate(target_loc(n_loc, n_loc))
+
+    allocate(target_ext(n+2,n+2))
+    target_ext = 0.d0 
+    target_ext(2:n+1,2:n+1) = u_target
+ 
     if (present(gradient)) then
         with_gradient = .true.
         allocate(lambda(n_loc, n_loc))
-        allocate(f_p, mold=gradient)
+        allocate(f_p(p))
         gradient = 0.d0
-        zeros = spread(0.d0, 1, 4*n+4)
-        allocate(target_loc, mold=lambda)
-        allocate(target_ext(n+2,n+2))
-        target_ext = 0.d0 
-        target_ext(2:n+1,2:n+1) = u_target
+        zeros = spread(0.d0, 1, p)
     else
         with_gradient = .false.
     end if
@@ -79,7 +82,8 @@ contains
 
     allocate( u_in(n_loc, n_loc) ) 
     allocate( u_out(n_loc, n_loc) )
-
+    u_in = 0.d0
+    u_out = 0.d0
     call set_boundary( coords, proc, u_in, boundary )
     u_out = u_in
     t = 0.d0
@@ -92,19 +96,14 @@ contains
       t = t + dt
     end do
 
-    ! We gather the solution on process 0
-    ! FIXME : unecessary, the gather is not required to compute the error
-    allocate ( sol_space(n, n) )
-    call gather_solution( sol_space, n, u_in, ndims, comm2D, is_master )
-    if (is_master) then
-      error = sum( (sol_space-u_target)**2)
-    end if
-    call MPI_Bcast(error, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    associate (of_x => coords(1) * (n_loc-2), of_y => coords(2) * (n_loc-2))
+      target_loc = target_ext(of_x + 1 : of_x + n_loc, of_y + 1 : of_y + n_loc) 
+    end associate
+    error = 0.d0 
+    error_loc = sum ((u_in(2:n_loc-1,2:n_loc-1) - target_loc(2:n_loc-1,2:n_loc-1))**2)
+    call MPI_ALLREDUCE(error_loc, error, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
     if ( with_gradient ) then
       ! backward  phase
-      associate (of_x => coords(1) * (n_loc-2), of_y => coords(2) * (n_loc-2))
-       target_loc = target_ext(of_x + 1 : of_x + n_loc, of_y + 1 : of_y + n_loc) 
-      end associate
       lambda= 2.d0 * (u_in - target_loc)
       call set_boundary( coords, proc, lambda, zeros)
       t = t_final 
@@ -122,6 +121,7 @@ contains
       end do
       deallocate (f_p)
       deallocate (lambda)
+      deallocate (lambda_tmp)
     end if
 
     deallocate( u_in )
@@ -138,7 +138,7 @@ contains
     integer, intent(in) :: coo(2)
     real(c_double), intent(out) :: u(:,:)
     real(c_double), intent(in) :: boundary(:)
-    integer :: n_loc, offset, offset_loc, n, i
+    integer :: n_loc, offset, n
 
     n_loc = size(u, 1)
     n  = (size(boundary, 1) - 4 )/ 4
@@ -188,7 +188,7 @@ contains
     real(c_double), intent(out) :: f_p(:)
     real(c_double), allocatable :: f_p_loc(:)
     real(c_double) :: dt, h
-    integer :: n_loc, offset, n, i, ierr, p
+    integer :: n_loc, offset, n, ierr, p
 
     n_loc = size(lambda_loc, 1) + 2
     n = (n_loc - 2) * proc
@@ -233,6 +233,8 @@ contains
     h = 1.d0 / (n + 1)
     dt = h ** 2 / 4.d0
     f_p = -dt * f_p  * (n+1)**2
+
+    deallocate(f_p_loc)
 
   end subroutine compute_f_p_t
 
