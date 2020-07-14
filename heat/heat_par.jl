@@ -2,6 +2,7 @@ using Distributed
 using Optim
 using LinearAlgebra
 
+# proxy function to creat cost and gradient 
 function create_par_problem(Z::Array{Float64,2}, T, proc)
   n = size(Z, 1)
   @assert size(Z, 2) == n
@@ -27,36 +28,47 @@ function create_par_problem(Z::Array{Float64,2}, T, proc)
   return cost, grad! , p0
 end
 
-function find_optim(n)
+function find_optim(n, script = true)
 
-       MPI.Init() 
-       comm = MPI.COMM_WORLD
-       p = MPI.Comm_size(comm)
-       r = MPI.Comm_rank(comm)
-    
-       is_master = (r == 0)
-       T = 1.
-       x = [ 1. *i /(n+1) for i=1:n ]
-       y = copy(x)
-       XX = repeat(x,1,n)
-       YY = repeat(y',n,1)
-       Z = exp.(XX).*sin.(YY)
+  if (script)
+    MPI.Init() 
+  end
 
-       σ, ∇σ!, x0 = create_par_problem(Z, T , convert(Int64, √p))
-      
-       # One evaluation of cost and gradient       
-       f0 = σ(x0)
-       g0 = zeros(size(x0))
-       ∇σ!(g0, x0)
-       if (is_master)
-         println("f0 = $f0, |g0| = ", norm(g0))
-       end
-    
-       #res = optimize(σ, ∇σ!, x0, ConjugateGradient(), Optim.Options(g_tol = 1e-7,
-       #                            iterations = 1000, store_trace = false, show_trace = false ))
-       #x_min = Optim.minimizer(res)
-       #f_min = σ(x_min)
-       #if (r == 0)
-       #    println(" |f(x_min)| = ",  f_min)
-       #end
+  comm = MPI.COMM_WORLD
+  p = MPI.Comm_size(comm)
+  r = MPI.Comm_rank(comm)
+  
+  is_master = (r == 0)
+  
+  # simulation parameter settings
+  T = 1.
+  x = [ 1. *i /(n+1) for i=1:n ]
+  y = copy(x)
+  XX = repeat(x,1,n)
+  YY = repeat(y',n,1)
+  Z = exp.(XX).*sin.(YY)
+
+  σ, ∇σ!, x0 = create_par_problem(Z, T , convert(Int64, √p))
+  
+  # One evaluation of cost and gradient       
+  f0 = σ(x0)
+  g0 = zeros(size(x0))
+  ∇σ!(g0, x0)
+  if (is_master)
+      println("f(x_0) = $f0     , |∇f(x_0)| = ", norm(g0))
+  end
+  
+  # optimization phase
+  res = optimize(σ, ∇σ!, x0, LBFGS(), Optim.Options(g_tol = 1e-7,
+                              iterations = 1000, store_trace = false, show_trace = false ))
+  
+  # post-optimation processing
+  x_min = Optim.minimizer(res)
+  f_min = σ(x_min)
+  g_min = zeros(size(x_min))
+  ∇σ!(g_min, x_min)
+
+  if (r == 0)
+    println("f(x_m) = $f_min , |∇f(x_m)| = ", norm(g_min))
+  end
 end

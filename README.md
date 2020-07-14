@@ -1,22 +1,28 @@
 # OptimizeMPI.jl
 
-This repository contains source code for the following poster at Julia Con 2020 : 
-"Calling a parallel simulation code from Julia". The aim is to make a basic tutorial
-to show how we can call a distributed memory parallel program from julia for
-doing parameter optimization. 
+This repository contains source code for a poster at Julia Con 2020 :
+"Calling a parallel simulation code from Julia". The aim is to present a basic tutorial
+explaining how to call a distributed memory parallel program from Julia and optimize
+some of its parameters.
 
-# Directories
+# directories
+
 - `squared_norm` : a very basic example using the squared $L_2$ norm
 - `heat` : control problem on the 2D heat equation using finite differencies
 - `examples` : small code snippets used in the notebook
-# Requirements 
+
+# requirements 
 
 - CMake 
 - MPI library
 - a Fortran 2003 Compiler (tested against Gfortran 10.1.0)
 - and gcc for snippets
+- Julia (tested with 1.5.0-rc1, but should work for versions >=1.x) with the 
+following packages installed : 
+ - `MPI.jl` : necessary
+ - `MPIClusterManagers.jl` : optional, just to be more comfortable when running examples.
 
-# Compilation
+# compilation
 - go into `<directory>` (`heat` or `squared_norm`)
 ```bash
 cd heat
@@ -31,9 +37,16 @@ Note : If your cmake does not suport -B, you could use the legacy way
 ```bash
 mkdir build && cd build && cmake .. && make && make test && make install && cd ..
 ```
-# Running examples
+# running examples
+If you have installed the package `MPIClusterManagers.jl` on your Julia version, you could run
+
+```bash
+julia cluster_optim.jl
+```
+otherwise, `mpirun` must launch julia for yourself
+
 ```bash
 mpirun -np 9 julia scr_optim.jl
 ```
-# Poster
-[![Click_here](https://raw.githubusercontent.com/jupyter/design/master/logos/Badges/nbviewer_badge.svg)](https://nbviewer.jupyter.org/github/aitzkora/OptimizeMPI.jl/blob/master/calling_a_parallel_code.ipynb?flush_cache=true)
+# poster
+[![nbviewer](https://raw.githubusercontent.com/jupyter/design/master/logos/Badges/nbviewer_badge.svg)](https://nbviewer.jupyter.org/github/aitzkora/OptimizeMPI.jl/blob/master/calling_a_parallel_code.ipynb?flush_cache=true)
