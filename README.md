@@ -38,4 +38,4 @@ mpirun -np 9 julia scr_optim.jl
 ```
 
 # View the notebook on nbviewier
-[![render](https://raw.githubusercontent.com/jupyter/design/master/logos/Badges/nbviewer_badge.svg)](https://nbviewer.jupyter.org/github/aitzkora/OptimizeMPI.jl/blob/master/calling_a_parallel_code.ipynb)
+[![render](https://raw.githubusercontent.com/jupyter/design/master/logos/Badges/nbviewer_badge.svg)](https://nbviewer.jupyter.org/github/aitzkora/OptimizeMPI.jl/blob/master/calling_a_parallel_code.ipynb?flush_cache=true)
