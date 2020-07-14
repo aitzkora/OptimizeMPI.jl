@@ -8,7 +8,7 @@ to share my small expertiences about that
 # Directories
 - `squared_norm` : a very basic example using the squared L₂ norm
 - `heat` : control problem on the 2D heat equation using finite differencies
-
+- `examples` : small code snippets used in the notebook
 # Requirements 
 
 - CMake 
