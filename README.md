@@ -1,12 +1,12 @@
 # OptimizeMPI.jl
 
 This repository contains source code for the following poster at Julia Con 2020 : 
-"Calling a parallel simulation code from Julia". The aim is to demonstrating to call
-a distributed memory parallel program from julia for doing parameter optimization. I want
-to share my small expertiences about that
+"Calling a parallel simulation code from Julia". The aim is to make a basic tutorial
+to show how we can call a distributed memory parallel program from julia for
+doing parameter optimization. 
 
 # Directories
-- `squared_norm` : a very basic example using the squared L₂ norm
+- `squared_norm` : a very basic example using the squared $L_2$ norm
 - `heat` : control problem on the 2D heat equation using finite differencies
 - `examples` : small code snippets used in the notebook
 # Requirements 
@@ -14,6 +14,7 @@ to share my small expertiences about that
 - CMake 
 - MPI library
 - a Fortran 2003 Compiler (tested against Gfortran 10.1.0)
+- and gcc for snippets
 
 # Compilation
 - go into `<directory>` (`heat` or `squared_norm`)
@@ -30,9 +31,7 @@ Note : If your cmake does not suport -B, you could use the legacy way
 ```bash
 mkdir build && cd build && cmake .. && make && make test && make install && cd ..
 ```
-
 # Running examples
-
 ```bash
 mpirun -np 9 julia scr_optim.jl
 ```
