@@ -405,13 +405,9 @@ the syntax is the following
 \end{Highlighting}
 \end{Shaded}
 
-where \texttt{function\_name} is the mangled name of the C function in
-the shared library library. If you do not know what is mangling, take a
-look at \href{https://en.wikipedia.org/wiki/Name_mangling}{there} :
-Roughly languages like Fortran (due to its case insensitivity) or C++
-(in which the same function name could have several different
-signatures), must encode their function names when they interoperate
-with C.
+where \texttt{function\_name} is the \href{https://en.wikipedia.org/wiki/Name_mangling}{mangled} 
+name of the C function in the shared library : Roughly languages like Fortran or C++
+must encode their function names when they interoperate with C.
 
 \hypertarget{remarks}{%
 \paragraph{Remarks}\label{remarks}}
@@ -423,9 +419,7 @@ with C.
   \texttt{"./mylib.so"}, but not \texttt{string(pwd(),"/mylib.so")}
 \item
   to use a library which is not in \texttt{.}, add the path to
-  \texttt{LD\_LIBRARY\_PATH} before launching \textbf{Julia} (Just
-  tested on Linux, adapt the rule for MacOS with
-  \texttt{DYLD\_LIBRARY\_PATH})
+  \texttt{LD\_LIBRARY\_PATH} before launching \textbf{Julia} 
 \item
   using \texttt{dlopen} and \texttt{dlsym} one could directly use the
   function pointer call
@@ -441,17 +435,17 @@ To start, the following C function
 \end{Highlighting}
 \end{Shaded}
 
-This example deserves some explanations: 1. to build a \emph{shared}
-library we add on the gcc compiler command the flag \texttt{-\/-shared}.
-This is evidently, compiler dependant. If you use Intel, NAG or
-Microsoft, it could be different. To enforce more portability, in
-provided codes, we use \textbf{CMake} as an utility to generate
-Makefiles and doing the compilation. To do that, with CMake, one could
-write \texttt{add\_library(name\_lib\ SHARED\ name\_src)}
-
+This example deserves some explanations: 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
 \setcounter{enumi}{1}
+\item
+  to build a \emph{shared} library we add on the gcc compiler command the flag \texttt{-\/-shared}.
+  This is evidently, compiler dependent. To enforce more portability, in
+  provided codes, we use \textbf{CMake} as an utility to generate
+  Makefiles and doing the compilation. To do that, with CMake, one could
+  write \texttt{add\_library(name\_lib\ SHARED\ name\_src)}
+
 \item
   One big difference between Fortran and C, is the default argument pass
   method ; In C, it is by-value, so a function like \texttt{addTwo}
