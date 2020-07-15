@@ -32,8 +32,8 @@ cd heat
 cmake -B build && for i in test, install; do make -j 4 -C build $i ; done
 ```
 It must install a *shared library* in the current directory (.so, .dylib or .dll)
-Note : If your cmake does not suport -B, you could use the legacy way
 
+Note : If your cmake does not suport -B, you could use the legacy way
 ```bash
 mkdir build && cd build && cmake .. && make && make test && make install && cd ..
 ```
@@ -48,5 +48,8 @@ otherwise, `mpirun` must launch julia for yourself
 ```bash
 mpirun -np 9 julia scr_optim.jl
 ```
+For clarity, a sequential version of the heat equation is implemented in Julia, in the file
+`heat_seq.jl`
+
 # poster
 [![nbviewer](https://raw.githubusercontent.com/jupyter/design/master/logos/Badges/nbviewer_badge.svg)](https://nbviewer.jupyter.org/github/aitzkora/OptimizeMPI.jl/blob/master/calling_a_parallel_code.ipynb?flush_cache=true)
