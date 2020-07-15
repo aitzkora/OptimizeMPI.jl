@@ -53,3 +53,12 @@ For clarity, a sequential version of the heat equation is implemented in Julia, 
 
 # poster
 [![nbviewer](https://raw.githubusercontent.com/jupyter/design/master/logos/Badges/nbviewer_badge.svg)](https://nbviewer.jupyter.org/github/aitzkora/OptimizeMPI.jl/blob/master/calling_a_parallel_code.ipynb?flush_cache=true)
+# Troubleshooting
+
+Sometimes, the compilation of `MPI.jl` or `MPIClusterManagers.jl` does not choose the MPI library that
+you want. Remember you can set some variable in the `startup.jl` file like
+```julia
+ENV["JULIA_MPI_C_LIBRARIES"] = "-L/usr/lib/openmpi/ -lmpi"
+ENV["JULIA_MPI_Fortran_INCLUDE_PATH"] = "-I/usr/include"
+ENV["JULIA_MPI_PATH"] = "/usr/"
+```
