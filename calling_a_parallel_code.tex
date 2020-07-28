@@ -1,5 +1,4 @@
 \documentclass[11pt]{article}
-
     \usepackage[breakable]{tcolorbox}
     \usepackage{parskip} % Stop auto-indenting (to mimic markdown behaviour)
     
@@ -363,12 +362,6 @@
 \begin{document}
     
     \maketitle
-    
-    
-
-    
-    \hypertarget{calling-a-parallel-simulation-code-from-julia}{%
-
  Code is available at \href{http://github.com/aitzkora/OptimizeMPI.jl}{Github}
 
 \hypertarget{rationale}{%
@@ -380,24 +373,22 @@ robust optimization method in a low-level language could be a waste of
 time, particularly when you are doing a Ph.D for instance. The aim of
 this poster is to share some recipes (technical and numerical), to
 achieve that in Julia. The knowledge level remains deliberately basic,
-so it can be seen as a tutorial. Our hypotheses are the following : -
-distributed memory paradigm for parallelism (i.e.~MPI) - direct problem
-is Fortran or C. - possibly, implementing a gradient computation will is
-done in the low level language. - we focus on continuous optimization
-(using \texttt{Optim.jl}), but principle is the same using JuMP for
-combinatorial optimization As technical points, we want to explain
-briefly how to call a piece of external code and how to run Julia
-scripts in a MPI environment
+so it can be seen as a tutorial. Our hypotheses are the following : 
+\begin{itemize}
+    \item distributed memory paradigm for parallelism (i.e.~MPI),
+    \item direct problem is in Fortran or C, 
+    \item possibly, implementing a gradient computation will is done in the low level language,
+    \item  we focus on continuous optimization (using \texttt{Optim.jl}), but principle is the same 
+using JuMP for combinatorial optimization. 
+\end{itemize}
+First of all, we want to explain how to call a piece of an external code and how to run Julia
+scripts in a MPI environment.
 
 \hypertarget{calling-fortran-or-c-code}{%
-\subsubsection{calling Fortran or C
-code}\label{calling-fortran-or-c-code}}
+\subsubsection{calling Fortran or C code}\label{calling-fortran-or-c-code}}
 
-To call a external piece of code, we use the \emph{Julia} statement
-\texttt{ccall}. As documented
-\href{https://docs.julialang.org/en/v1/base/c/}{here} or
-\href{https://craftofcoding.wordpress.com/2017/02/08/calling-c-from-julia-i-simple-arrays/}{there},
-the syntax is the following
+As documented \href{https://docs.julialang.org/en/v1/base/c/}{here} , we need 
+the \emph{Julia} statement \texttt{ccall}: 
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -406,7 +397,7 @@ the syntax is the following
 \end{Shaded}
 
 where \texttt{function\_name} is the \href{https://en.wikipedia.org/wiki/Name_mangling}{mangled} 
-name of the C function in the shared library : Roughly languages like Fortran or C++
+name of the C function in the shared library. Roughly speaking, languages like Fortran or C++
 must encode their function names when they interoperate with C.
 
 \hypertarget{remarks}{%
@@ -415,19 +406,14 @@ must encode their function names when they interoperate with C.
 \begin{itemize}
 \tightlist
 \item
-  \texttt{library} is only \emph{formally} a string : you could use
+  \texttt{library} is only \emph{formally} a string: you could use
   \texttt{"./mylib.so"}, but not \texttt{string(pwd(),"/mylib.so")}
 \item
-  to use a library which is not in \texttt{.}, add the path to
-  \texttt{LD\_LIBRARY\_PATH} before launching \textbf{Julia} 
-\item
-  using \texttt{dlopen} and \texttt{dlsym} one could directly use the
-  function pointer call
+  if the library is not in \texttt{.}, add path to \texttt{LD\_LIBRARY\_PATH} before launching Julia 
 \end{itemize}
 
-To start, the following C function
-\texttt{int\ addTwo(int\ x)\ \{\ return\ x+2;\ \}} could be call
-
+For example, the following C function
+\texttt{int\ addTwo(int\ x)\ \{\ return\ x+2;\ \}} could be called with
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{run(}\SpecialStringTok{\textasciigrave{}gcc {-}o addTwo.so {-}{-}shared addTwo.c\textasciigrave{}}\NormalTok{)}\OperatorTok{;}
@@ -438,78 +424,59 @@ To start, the following C function
 This example deserves some explanations: 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
-\setcounter{enumi}{1}
+\setcounter{enumi}{0}
 \item
-  to build a \emph{shared} library we add on the gcc compiler command the flag \texttt{-\/-shared}.
-  This is evidently, compiler dependent. To enforce more portability, in
-  provided codes, we use \textbf{CMake} as an utility to generate
-  Makefiles and doing the compilation. To do that, with CMake, one could
-  write \texttt{add\_library(name\_lib\ SHARED\ name\_src)}
-
+  to build a \emph{shared} library we add the flag \texttt{-\/-shared}, which is 
+  compiler-dependent. To improve portability in the provided codes, we use \textbf{CMake} 
+  to generate Makefiles and compile: \texttt{add\_library(name\_lib\ SHARED\ name\_src)}
 \item
-  One big difference between Fortran and C, is the default argument pass
-  method ; In C, it is by-value, so a function like \texttt{addTwo}
-  cannot modify its arguments. To do that, you need to use pointers and
-  furnish a Julia \textbf{reference} to \texttt{ccall}
-\item
-  In Fortran, since args are passed by reference, we will use a
-  reference.
+  When using C, which by default passes function arguments by value, we need pointers if we want
+  modify arguments in the function's body. In that case, Julia's code must provide a \textbf{reference} 
+  to \texttt{ccall}.
 \end{enumerate}
+  On the contrary, in Fortran, since args are passed by reference, we always 
+  use reference for non-pointer types. For example, the fortran code
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{module}\NormalTok{ example}
-  \KeywordTok{use}\NormalTok{ iso\_c\_binding}
-\CommentTok{contains}
-  \KeywordTok{subroutine}\NormalTok{ addTwoF(x) bind(C, name }\KeywordTok{=}\StringTok{"addTwoF"}\NormalTok{)}
+\KeywordTok{subroutine}\NormalTok{ addTwoF(x) bind(C, name }\KeywordTok{=}\StringTok{"addTwoF"}\NormalTok{)}
     \DataTypeTok{integer(c\_int)}\NormalTok{, }\DataTypeTok{intent (inout)} \DataTypeTok{::}\NormalTok{ x}
 \NormalTok{    x }\KeywordTok{=}\NormalTok{ x }\KeywordTok{+} \DecValTok{2}
   \KeywordTok{end subroutine} 
-\KeywordTok{end module}
 \end{Highlighting}
 \end{Shaded}
 
-In this example, we used the statement bind to attach a C name to our
-Fortran function. It will override the mangled name, when we will use
-\texttt{ccall}. To enforce compatibility, Fortran 90 has some C
-compatibles types , such as \texttt{real(c\_double)},
-\texttt{integer(c\_int)} defined in the module \texttt{iso\_c\_binding}.
-The \texttt{intent(inout)} does not change how the argument is passed
-(by reference), it is just a information to enable the compiler to do
-more checks.
+could be called using
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{z }\OperatorTok{=} \DataTypeTok{Ref}\NormalTok{\{}\DataTypeTok{Int32}\NormalTok{\}(}\FloatTok{12}\NormalTok{) }\CommentTok{\# ✏️ VERY IMPORTANT ✏️}
-\NormalTok{w }\OperatorTok{=} \KeywordTok{ccall}\NormalTok{((}\OperatorTok{:}\NormalTok{addTwoF}\OperatorTok{,} \StringTok{"./addTwoF.so"}\NormalTok{)}\OperatorTok{,}\NormalTok{ Cvoid}\OperatorTok{,}\NormalTok{ (}\DataTypeTok{Ref}\NormalTok{\{}\DataTypeTok{Int32}\NormalTok{\}}\OperatorTok{,}\NormalTok{)}\OperatorTok{,}\NormalTok{ z)}
-\NormalTok{println(}\StringTok{"z = "}\OperatorTok{,}\NormalTok{z[])}
+\NormalTok{z }\OperatorTok{=} \DataTypeTok{Ref}\NormalTok{\{}\DataTypeTok{Int32}\NormalTok{\}(}\FloatTok{12}\NormalTok{) }\CommentTok{\# !VERY IMPORTANT!}
+\NormalTok{w }\OperatorTok{=} \KeywordTok{ccall}\NormalTok{((}\OperatorTok{:}\NormalTok{addTwoF}\OperatorTok{,} \StringTok{"./addTwoF.so"}\NormalTok{)}\OperatorTok{,}\NormalTok{ Cvoid}\OperatorTok{,}\NormalTok{ (}\DataTypeTok{Ref}\NormalTok{\{}\DataTypeTok{Int32}\NormalTok{\}}\OperatorTok{,}\NormalTok{)}\OperatorTok{,}\NormalTok{ z)}\OperatorTok{;}\NormalTok{println(}\NormalTok{z[])}
 \end{Highlighting}
 \end{Shaded}
 
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\setcounter{enumi}{3}
-\tightlist
-\item
-  To end with external code calling, we have to speak about arrays :
-  Julia arrays can be convert to pointers without any problem, when
-  using \texttt{ccall} As an example,
-  \texttt{void\ changeArray(int\ n,\ double\ *\ x)\ \{\ if\ (n\ \textgreater{}\ 1)\ x{[}0{]}\ +=\ 3\ ;\ \}}
-  could be call by
-\end{enumerate}
+We use the statement \texttt{bind} to attach a C name to \texttt{addTwoF}
+that will override the mangled name. For better compatibility Fortran90 has C equivalent types
+such as \texttt{real(c\_double)} or \texttt{integer(c\_int)} defined in \texttt{iso\_c\_binding}.
 
+To finish, Julia arrays can be converted to pointers without any problem when using \texttt{ccall}.
+For instance, we can call the function 
+
+\texttt{void\ changeArray(int\ n,\ double\ *\ x)\ \{\ if\ (n\ \textgreater{}\ 1)\ x{[}0{]}\ +=\ 3\ ;\ \}}
+
+with
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{a }\OperatorTok{=}\NormalTok{ [}\FloatTok{1}\OperatorTok{:}\FloatTok{3}\NormalTok{.}\OperatorTok{;}\NormalTok{]}\OperatorTok{;} \KeywordTok{ccall}\NormalTok{((}\OperatorTok{:}\NormalTok{changeArray}\OperatorTok{,} \StringTok{"./changeArray.so"}\NormalTok{)}\OperatorTok{,}\NormalTok{ Cvoid}\OperatorTok{,}\NormalTok{(}\DataTypeTok{Int32}\OperatorTok{,} \DataTypeTok{Ptr}\NormalTok{\{}\DataTypeTok{Float64}\NormalTok{\}}\OperatorTok{,}\NormalTok{)}\OperatorTok{,}\NormalTok{ size(a}\OperatorTok{,}\FloatTok{1}\NormalTok{)}\OperatorTok{,}\NormalTok{ a) println(}\StringTok{"$a"}\NormalTok{)}
+\NormalTok{a }\OperatorTok{=}\NormalTok{ [}\FloatTok{1}\OperatorTok{:}\FloatTok{3}\NormalTok{.}\OperatorTok{;}\NormalTok{]}\OperatorTok{;} \KeywordTok{ccall}\NormalTok{((}\OperatorTok{:}\NormalTok{changeArray}\OperatorTok{,} \StringTok{"./changeArray.so"}\NormalTok{)}\OperatorTok{,}\NormalTok{ Cvoid}\OperatorTok{,}\NormalTok{(}\DataTypeTok{Int32}\OperatorTok{,} \DataTypeTok{Ptr}\NormalTok{\{}\DataTypeTok{Float64}\NormalTok{\}}\OperatorTok{,}\NormalTok{)}\OperatorTok{,}
+    \NormalTok{ size(a}\OperatorTok{,}\FloatTok{1}\NormalTok{)}\OperatorTok{,}\NormalTok{ a)\OperatorTok{;} println(}\StringTok{"$a"}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
 \hypertarget{interacting-with-mpi}{%
 \subsubsection{Interacting with MPI}\label{interacting-with-mpi}}
 
-Interacting with MPI, is not so hard, thanks to the good job done by
-authors of \texttt{MPI.jl} and \texttt{MPIClusterManagers} packages.a
-For instance, using \texttt{MPI.jl}, one could run
+For interacting with MPI, we could use the packages \texttt{MPI.jl} and 
+\texttt{MPIClusterManagers}. Using \texttt{MPI.jl} one can run
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -520,26 +487,24 @@ For instance, using \texttt{MPI.jl}, one could run
 \end{Highlighting}
 \end{Shaded}
 
-directly from shell
-\texttt{mpirun\ -np\ 2\ julia\ examples/hello\_world.jl}.
+directly from shell with \texttt{mpirun\ -np\ 2\ julia\ examples/hello\_world.jl}.
 
-Doing so, since \texttt{mpirun} calls julia, the julia code, is
-JIT-compiled before to execute each time we run the script; Furthermore,
+Doing so, since \texttt{mpirun} calls Julia, this code will be 
+JIT-compiled before being executed each time we run the script. Furthermore,
 we must run the code out of the Julia REPL, which is not very convenient
-for doing some experiments. To avoid that, we can use the
-\texttt{MPIClusterManagers} package's macro \texttt{@mpi\_do} after the
-following preamble
+for some experiments. To avoid that, we can use macro \texttt{@mpi\_do} 
+from \texttt{MPIClusterManagers} package, after the following preamble
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{using}\NormalTok{ MPIClusterManagers}\OperatorTok{,}\NormalTok{ Distributed}
 \NormalTok{manager }\OperatorTok{=}\NormalTok{ MPIManager(np}\OperatorTok{=}\FloatTok{4}\NormalTok{)}
 \NormalTok{addprocs(manager)}
-\PreprocessorTok{@everywhere} \KeywordTok{import}\NormalTok{ MPI}
+\PreprocessorTok{@everywhere} \KeywordTok{import}\NormalTok{ MPI.}
 \end{Highlighting}
 \end{Shaded}
 
-and running several times the following block without restarting Julia
+In this way, we can modify and run the following block without restarting Julia
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -559,36 +524,33 @@ computation on the master (which is not part of the MPI Cluster).
 \subsubsection{Distributed
 Minimization}\label{distributed-minimization}}
 
-\hypertarget{preliminary-remark}{%
-\paragraph{preliminary remark}\label{preliminary-remark}}
-
 Formally, we want to solve a problem like
-\[ \min_{x_1,\cdots,x_p} f(x_1,\cdots,x_p) \mbox { where } x_i \in \mathbb{R}^{n_i}\]
-the main function \(f\) is assumed decomposable, i.e, we could write as
-a max or a sum of functions defined on each \(\mathbb{R}^{n_i}\), for
-instance \[ f(x_1,\cdots,x_p) = \sum_{i=1}^p f_i(x_i)\] In almost all
-optimization methods, you have a \textbf{linesearch} step, which try to
-find the step length \(\alpha\) to go forward in the descent direction.
-Since the computation is distributed, each algorithm, owns a version of
-the current step. Fortunately, since the \textbf{linesearch} uses only
-the value of the function, which it is the same on each process, so
-\(\alpha\) must be the same across processes.
+\[ \min_{x_1,\cdots,x_p} f(x_1,\cdots,x_p), \] 
+where $x_i \in \mathbb{R}^{n_i}$ and the main function \(f\) is assumed decomposable, i.e. we 
+could write it as a maximum or a sum of functions defined on each \(\mathbb{R}^{n_i}\). For
+instance, \[ f(x_1,\cdots,x_p) = \sum_{i=1}^p f_i(x_i).\] In almost all
+optimization methods there is a \textbf{linesearch} step, which tries to
+find a step length \(\alpha\) to advance in the descent direction.
+Since the computation is distributed, each algorithm owns a version of $\alpha$.
+Fortunately, since the \textbf{linesearch} uses only
+the value of the function, which it is the same on each process,
+\(\alpha\) remains the same across processes.
 
 \hypertarget{a-dummy-example-the-squared-l_2-norm}{%
-\paragraph{\texorpdfstring{A dummy example : the squared \(L_2\)
-norm}{A dummy example : the squared L\_2 norm}}\label{a-dummy-example-the-squared-l_2-norm}}
+\paragraph{\texorpdfstring{A dummy example: the squared \(L_2\)
+norm}{A dummy example: the squared L\_2 norm}}\label{a-dummy-example-the-squared-l_2-norm}}
 
 Suppose we want to minimize \(f(x) = \frac{1}{2}\|x-c\|^2\) where \(c\)
 is a constant vector. The solution is trivially equal to \(c\). We also
 remark that if we cut \(\mathbb{R}^n\) into some chunks, the \(f\)
 function is clearly decomposable and each \(f_i\) is just
 \(f_i(x_i) = \frac{1}{2}\|x_i - c_i\|^2\) where \(c_i\) has the chunk
-components of \(c\). Even if this case, we do not need a gradient to
-find the solution, one can computes very easily seeing that
-\[\nabla f(x) = \bigoplus_{i=1}^p \nabla f_i(x_i) = \bigoplus_{i=1}^p (x_i - c_i) \].
-Since this example is very dumb, we directly build the partition of
-state vector \(x\) in Julia and computing \(f_i,\nabla f_i\) is coded in
-Fortran. To partitionate \(x\) we computes the chunk sizes according to
+components of \(c\). Even if in this case we do not need a gradient to
+find the solution, we can compute it very easily using
+\[\nabla f(x) = \bigoplus_{i=1}^p \nabla f_i(x_i) = \bigoplus_{i=1}^p (x_i - c_i).\]
+Since this example is very simple, we directly build the partition of
+the state vector \(x\) in Julia and computation of \(f_i,\nabla f_i\) is done in
+Fortran. To divide \(x\) we compute the chunk sizes according to
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -602,7 +564,7 @@ Fortran. To partitionate \(x\) we computes the chunk sizes according to
 \end{Highlighting}
 \end{Shaded}
 
-Then, Julia gather the chunks on the root process
+Then, Julia gathers the chunks on the root process
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -610,8 +572,8 @@ Then, Julia gather the chunks on the root process
 \end{Highlighting}
 \end{Shaded}
 
-The low-level part, is simply a computation of the local squared norm
-and with \texttt{MPI\_ALLREDUCE} we shared the global sum among all
+The low-level part is simply a computation of the local squared norm
+and with \texttt{MPI\_ALLREDUCE} we share the global sum among all
 processes.
 
 \begin{Shaded}
@@ -628,7 +590,7 @@ processes.
 \end{Highlighting}
 \end{Shaded}
 
-Now, we it remains to write the interface using \texttt{ccall}
+Now, it remains to write the interface using \texttt{ccall}
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -643,122 +605,83 @@ Now, we it remains to write the interface using \texttt{ccall}
 \end{Shaded}
 
 For simplicity, we choose \(c_i = \cos(i)\) and the slices are shared as
-a global variable (very bad!)
+a global variable.
 
-We can now choose our favorite minimization algorithm : Most of people
-likes Nelder-Mead algorithm because it does not require gradient, but
-please do not use it, proofs of convergence towards non-stationary
-points exist in the literature
-\href{http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.48.9967}{Torczon}
-or
-\href{https://www.researchgate.net/publication/2763859_Convergence_of_the_Nelder-Mead_simplex_method_to_a_non-stationary_point}{McKinnon}.
-Since we have a gradient at our disposal, why not choose a ``1.5'' order
-method like \texttt{LBFGS} ?
-\texttt{julia\ res\ =\ optimize(cost,\ grad!,\ x\_loc,\ LBFGS(),\ Optim.Options(...\ ))}
-where \texttt{cost} and \texttt{grad!} are defined by
-\texttt{cost\ =\ x\ -\textgreater{}\ simu!(n,\ x,\ df\_dummy)} and
-\texttt{grad!\ =\ (g,x)-\textgreater{}\ simu!(n,x,g)}
+We can now choose our favorite minimization algorithm. A lot of people
+like Nelder-Mead algorithm because it does not require a gradient, but
+please do not use it! Proofs of convergence towards non-stationary
+points exist in the literature \href{http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.48.9967}{Torczon}.
 
-Note, doing that is costly, because we compute a gradient even if we
-just need \(f\). We will see, in the next example that we must be able
-to compute \(f\) without computing \(\nabla f\).
+Knowing the gradient, we can choose a ``1.5`` order method like \texttt{LBFGS}.
+
+\texttt{res\ =\ optimize(cost,\ grad!,\ x\_loc,\ LBFGS(),\ Optim.Options(...\ ))}
+
+where \texttt{cost} and \texttt{grad!} are defined by \texttt{cost\ =\ x\ -\textgreater{}\ simu!(n,\ x,\ df\_dummy)} and \texttt{grad!\ =\ (g,x)-\textgreater{}\ simu!(n,x,g).}
+When we do not need a gradient, we can avoid to compute it using a branching condition.
 
 \hypertarget{a-more-advance-example-controlling-the-2d-heat-equation}{%
-\paragraph{A more advance example : controlling the 2D heat
+\paragraph{A more advance example: controlling the 2D heat
 equation}\label{a-more-advance-example-controlling-the-2d-heat-equation}}
 
-We will now consider a more realistic problem : it remains a toy problem
-(just 1600 loc), but to solve it, we will need of a classical tool for
-time dependent problems : the adjoint method. Before to explain this
-point, let us describe the problem
-
-We will heat a square, just applying from the beginning to the end of
-the simulation the same values on the boundary \(\Gamma\) of the square.
-It is our control ; we want obtain for \(t=t_{final}\) some values
-inside the square as close as possible to a target function. In a
-continuous world, we want to solve \begin{eqnarray}
+Before talking about adjoint methods, let us describe our ``toy'' problem (which requires 1600 sloc).
+We heat a square, by imposing a constant but not uniform temperature 
+on the boundary \(\Gamma\) of the square. We want to obtain 
+for \(t=t_{final}\) values of the temperature inside the square as close as possible 
+to a target function. The continuous problem is
+\begin{eqnarray}
    \min_p && \int_{[0,1]^2} (u(x,t_{final}) - u_{target}(x))^2 \, dx \\
-   \mbox { such that }     && \frac{\partial u}{\partial t} (x,t) = \Delta u(x,t) \forall (x,t) \in [0,1]^2 \times [0,t_{final}] \\ 
-    && u(x,t) = p(x)  \forall  (x,t) \in \Gamma \times [0,t_{final}]
+   \mbox { such that }     && \frac{\partial u}{\partial t} (x,t) = \Delta u(x,t), \, \forall (x,t) \in [0,1]^2 \times [0,t_{final}], \\ 
+    && u(x,t) = p(x), \,  \forall  (x,t) \in \Gamma \times [0,t_{final}.]
 \end{eqnarray}
 
-We discretize this system, using finite differente scheme for space and
-Euler formula for time, and obtain \begin{eqnarray}
+After discretizing, using finite difference scheme for space and Euler formula for time, we obtain 
+\begin{eqnarray}
    \min_p &&  \|U^n- U^{target}\|^2_{inside}  \\
    \mbox { such that }     && U^{n+1} = F(U^n,p) = U^n - \frac{\delta t}{h^2} \cdot K2D(U^n,p) \\
                            && U^0 = 0. 
 \end{eqnarray}
 
-where \(K2D\) is the heat kernel with \(p\) on the boundary. For those
-who do not like these formulae, just remember that we have a recursive
-sequence of matrices, and controlling boundary matrix terms, we want to
-minimize the error relative to a target matrix at the last iteration.
-The updating scheme is the following
+where \(K2D\) is the heat kernel with \(p\) on the boundary, which can be sketched as
 
 \begin{figure}
 \centering
-\includegraphics{figures/buffer.pdf}
+    \includegraphics[width=70mm]{figures/buffer.pdf}
 \caption{update scheme}
 \end{figure}
 
-For better explanation, we furnish a Julia sequential version of the
-problem in the file \texttt{heat\_seq.jl} Numericians often call that a
-4-stencil. Each interior point of the matrix is computed used its values
-and its 4 neighbour values. In the contrary of the previous problem, all
-the parallel part is done in Fortran. The Julia program interacts with
-the Fortran code, proposing a vector \(p\) for the value of the boundary
-\(\Gamma\) and the fortran program could return the value of the
-function or the gradient : we use the \texttt{optional} feature of
-Fortran arguments, and interoperability with C enable us to give null
-pointer when the argument is not present.
+In this 4-stencil, each interior point of the matrix is computed as a linear combination of 
+its value and its four neighbour values. The direct problem is computed through 
+a recursive sequence of matrices. By controlling matrix boundary terms, we want to
+minimize the error relative to a target matrix at the last iteration. See \texttt{heat\_seq.jl} 
+as a Julia sequential implementation of the algorithm. In this case, all the parallel part is 
+done in Fortran. The Julia program transfers the vector \(p\) representing the boundary
+\(\Gamma\) to the Fortran program which could return the cost or the gradient: 
+Fortran's \texttt{optional} feature for functions arguments is used to factorize code, when we 
+need only the cost $f$.
 
 \hypertarget{adjoint-method}{%
 \subparagraph{Adjoint method}\label{adjoint-method}}
 
-Adjoint method are useful, when we have a state equation, for instance,
-\(F(x,p) = 0\) and we want minimize a function \(g(x,p)\) relatively to
-\(p\). Explaining briefly the adjoint method, is not easy, and we
-recommend to read the
+Adjoint methods are used when we want to minimize a function \(g(x,p)\) relatively to $p$ under
+the state's constraint \(F(x,p) = 0\). A good reference on this topic is
 \href{https://github.com/mitmath/18335/blob/master/notes/adjoint/recurrence2.pdf}{note
-of about reccurence} S. G Johnson. To sum up, to compute a gradient of
-\(g(p)= \| U^n(p) - U^{target} \|^2\), we need to apply a direct
-recursion computing the final state and final error, and after we
-backwardly compute contribution to the gradient using adjoint state. We
-could another time, take the algorithm from \texttt{heat\_seq.jl} to
-understand the principle
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\KeywordTok{function}\NormalTok{ simu(p}\OperatorTok{::}\DataTypeTok{Array}\NormalTok{\{}\DataTypeTok{Float64}\OperatorTok{,}\FloatTok{1}\NormalTok{\}}\OperatorTok{,}\NormalTok{ compute\_gradient}\OperatorTok{::}\DataTypeTok{Bool} \OperatorTok{=} \ExtensionTok{true}\NormalTok{)}
-\NormalTok{ u\_f }\OperatorTok{=}\NormalTok{ U\_final(p}\OperatorTok{,}\NormalTok{ T) }\CommentTok{\# direct recursion}
-\NormalTok{ v }\OperatorTok{=}\NormalTok{ sum((u\_f }\OperatorTok{{-}}\NormalTok{ vec(target))}\OperatorTok{.\^{}}\FloatTok{2}\NormalTok{)}
-\NormalTok{ λ }\OperatorTok{=} \FloatTok{2} \OperatorTok{.*}\NormalTok{(u\_f }\OperatorTok{{-}}\NormalTok{ vec(target))}
-\NormalTok{ (}\OperatorTok{...}\NormalTok{) }
-\NormalTok{ fₚ }\OperatorTok{=}\NormalTok{ ∂ₚF(n) }\CommentTok{\# p{-}partial derivative ≈ zeroing u in F }
-\NormalTok{ ∇f }\OperatorTok{=}\NormalTok{ zeros(P)}
- \KeywordTok{for}\NormalTok{ t}\OperatorTok{=}\NormalTok{T}\OperatorTok{:{-}}\NormalTok{dt}\OperatorTok{:}\NormalTok{dt}
-\NormalTok{     ∇f }\OperatorTok{+=}\NormalTok{ fₚ}\CharTok{\textquotesingle{}*λ}
-\NormalTok{     λ }\OperatorTok{=}\NormalTok{ ∂ᵤF(λ) }\CommentTok{\# adjoint update ≈ zeroing p in F}
- \KeywordTok{end}
- \KeywordTok{return}\NormalTok{ v}\OperatorTok{,}\NormalTok{  ∇f }
-\KeywordTok{end}
-\end{Highlighting}
-\end{Shaded}
+of about reccurence} S. G Johnson. 
+To sum up, to compute a gradient of \(g(p)= \| U^n(p) - U^{target} \|^2\), we need to apply a
+direct recursion to compute the final state and the final error, and then we backwardly compute 
+contributions to the gradient using adjoint state. 
 
 Some software tools using \emph{automatic differentiation} exist to
-generate a program computing the gradient. For instance, if your code is
-written in Julia (which is not the purpose of this poster), you could
-use \href{https://www.juliadiff.org/}{JuliaDiff}. For C or Fortran
-codes, for instance your could use
-\href{https://www.mcs.anl.gov/research/projects/adifor/}{adifor} or
+generate a program which computes the gradient. In Julia, 
+one could use \href{https://www.juliadiff.org/}{JuliaDiff}. For C or Fortran
+codes, see \href{https://www.mcs.anl.gov/research/projects/adifor/}{adifor} or
 \href{http://tapenade.inria.fr:8080/tapenade/index.jsp}{tapenade}. In
-our case, computing analytical for the adjoint is very simple. Since
+our case, the gradient can be computed analytically. Since
 \(F\) is linear, partial differential of \(F\) relative to \(U\) and
-\(p\), is \(F\) herself, zeroing the other component.
+\(p\) is \(F\) herself, zeroing the other component.
 \[ \partial_uF(u,p)[v] =  v - \frac{\delta t}{h^2} \cdot K2D(v,0) \mbox{ and }
-\partial_pF(u,p)[q] =  - \frac{\delta t}{h^2} \cdot K2D(0,q) \] One
-could remark that the two operators are very sparse, which is good for
-us
+\partial_pF(u,p)[q] =  - \frac{\delta t}{h^2} \cdot K2D(0,q). \] 
+
+One could remark that the two operators are very sparse, which is practical.
 
 \hypertarget{future-works}{%
 \paragraph{Future works}\label{future-works}}
@@ -766,23 +689,12 @@ us
 \begin{itemize}
 \tightlist
 \item
-  In the heat problem, after computing the optimal \(p\), we could
-  compute at least the final U.
+  benchmarking: check at least that Fortran parallel code beats Julia sequential.
 \item
-  benchmarks must be done : to be sure that Fortran parallel code beats
-  Julia sequentiel
-\item
-  the author wants to write a package in the same spirit as MPI.jl but
-  for
-  \href{https://github.com/sourceryinstitute/opencoarrays}{OpenCoarrays}.
+  create a package in the same spirit as MPI.jl but
+  for \href{https://github.com/sourceryinstitute/opencoarrays}{OpenCoarrays}.
   MPI is well suited for parallelism, but it remains a library in
   Fortran. Coarrays are now part of the standard and they are more
-  natural to write parallel algorithms.
+  suited to write parallel algorithms.
 \end{itemize}
-
-
-    % Add a bibliography block to the postdoc
-    
-    
-    
 \end{document}
